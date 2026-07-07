@@ -33,7 +33,23 @@ else
   echo "[OfficeEditor] 警告: docker-compose.yaml 不存在"
 fi
 
-# 5. 创建 systemd 服务
+# 5. 配置 FNos nginx 代理 OnlyOffice（加速加载）
+echo "[OfficeEditor] 配置 nginx 代理..."
+cat > "/usr/trim/nginx/conf/conf.d/officeeditor-officeds.conf" << 'NGXEOF'
+location ^~ /officeds/ {
+   proxy_pass http://127.0.0.1:9080/;
+   proxy_set_header Host $host;
+   proxy_set_header X-Real-IP $remote_addr;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   proxy_http_version 1.1;
+   proxy_set_header Upgrade $http_upgrade;
+   proxy_set_header Connection $connection_upgrade;
+}
+NGXEOF
+/usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || true
+echo "[OfficeEditor] nginx 代理已配置: /officeds/ → 127.0.0.1:9080"
+
+# 6. 创建 systemd 服务
 echo "[OfficeEditor] 创建 systemd 服务..."
 cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]

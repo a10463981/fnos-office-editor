@@ -149,7 +149,7 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	configJSON := buildEditorConfig(filePath, r, cfg, baseURL)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, editorPageHTML, docSvrURL, configJSON)
+	fmt.Fprintf(w, editorPageHTML, configJSON)
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -338,7 +338,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="%s/web-apps/apps/api/documents/api.js"></script>
+<script src="/officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
