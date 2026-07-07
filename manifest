@@ -1,6 +1,6 @@
 appname="OfficeEditor"
-version="1.0.0"
-display_name="FNos 办公编辑器"
+version="1.0.00"
+display_name="office 协作"
 desc="FNos 原生 Office 在线编辑器。基于 OnlyOffice，支持 DOCX/XLSX/PPTX 在线编辑、多人协作、用户身份认证、内外网访问。"
 maintainer="FNos Office Editor Team"
 maintainer_url="https://github.com/a10463981/fnos-office-editor"

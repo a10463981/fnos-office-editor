@@ -1,7 +1,7 @@
 {
   ".url": {
     "OfficeEditor.Desktop": {
-      "title": "FNos 办公编辑器",
+      "title": "office 协作",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
       "url": "/cgi/ThirdParty/OfficeEditor/index.cgi",
