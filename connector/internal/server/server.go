@@ -280,17 +280,8 @@ func buildEditorConfig(filePath string, r *http.Request, cfg *Config) string {
 	// JWT signing
 	if cfg.JWTSecret != "" {
 		if b, err := json.Marshal(config); err == nil {
-			if tok, err := signJWT(cfg.JWTSecret, b); err == nil {
-				configJSON, _ := json.Marshal(config)
-				tok = tok // Already computed
-				_ = tok
-			}
-		}
-		// Re-marshal with token
-		if b, err := json.Marshal(config); err == nil {
-			if tok, err := signJWT(cfg.JWTSecret, b); err == nil {
-				// Add token to config
-				config["token"] = tok
+			if t, err := signJWT(cfg.JWTSecret, b); err == nil {
+				config["token"] = t
 			}
 		}
 	}
