@@ -605,9 +605,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
     <h3>⚙️ 字体设置</h3>
     <label>自定义字体目录路径（.ttf/.otf 文件将自动加载到 OnlyOffice）</label>
     <input type="text" id="fontsDirInput" placeholder="/vol1/1000/我的字体/">
+    <p style="font-size:12px;color:#999;margin:-8px 0 12px 0">⚠️ 点击保存后 Docker 重建需要约 20 秒，请耐心等待提示成功后再操作。</p>
     <div class="actions">
       <button class="btn-cancel" onclick="closeSettings()">取消</button>
-      <button class="btn-save" onclick="saveSettings()">保存并生效</button>
+      <button class="btn-save" id="btnSaveSettings" onclick="saveSettings()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -652,11 +653,14 @@ function closeSettings(){
 }
 function saveSettings(){
   var dir=document.getElementById("fontsDirInput").value.trim();
-  if(!dir){toast("请输入字体目录路径");return;}
+  if(!dir){toast("请输入字体目录路径") ;return;}
+  var btn=document.getElementById("btnSaveSettings");
+  btn.disabled=true;btn.textContent="Docker 重启中...";
   fetch(apiBase+"/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
     .then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})
     .then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败: "+d.error);closeSettings();})
-    .catch(e=>{toast("保存失败: "+e.message);console.error("saveSettings error:",e)});
+    .catch(e=>{toast("保存失败: "+e.message);})
+    .finally(function(){btn.disabled=false;btn.textContent="保存并生效";});
 }
 loadHistory();
 </script>
