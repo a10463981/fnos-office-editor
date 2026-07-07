@@ -1,7 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# OfficeEditor - install_callback
-# 安装后：部署二进制 + 配置 nginx 反代 + 启动 OnlyOffice + systemd
+# OfficeEditor - install_callback  
 # ============================================================================
 set -e
 
@@ -15,53 +14,26 @@ echo "[OfficeEditor] 部署连接器..."
 cp "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector 2>/dev/null || \
   install -m 755 "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
 chmod +x /usr/local/bin/officeeditor-connector 2>/dev/null || true
-echo "[OfficeEditor] 连接器已部署"
 
 # 2. 生成随机 JWT 密钥
 JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
 export JWT_SECRET
-echo "[OfficeEditor] JWT 密钥已生成"
 
-# 3. 配置 FNos nginx 反向代理
-echo "[OfficeEditor] 配置 FNos nginx..."
-NGINX_CONF="/usr/trim/nginx/conf/conf.d/officeeditor.conf"
-cat > "$NGINX_CONF" << 'NGINXEOF'
-location ^~ /officeeditor/ {
-   proxy_pass http://localhost:10088/;
-   proxy_set_header Upgrade $http_upgrade;
-   proxy_set_header Connection $connection_upgrade;
-   proxy_set_header Host $host;
-   proxy_set_header X-Real-IP $remote_addr;
-   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-   proxy_set_header X-Forwarded-Proto $scheme;
-   proxy_set_header X-Auth-Username $remote_user;
-   proxy_set_header X-Auth-UID $remote_user;
-   proxy_read_timeout 300s;
-   proxy_send_timeout 300s;
-}
-NGINXEOF
-
-# 重载 nginx（忽略错误，可能没权限）
-/usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || echo "  (nginx 重载需要手动执行)"
-echo "[OfficeEditor] nginx 配置完成"
-
-# 4. 添加 admin 到 docker 组
+# 3. 添加 docker 组
 gpasswd -a admin docker 2>/dev/null || usermod -aG docker admin 2>/dev/null || true
-echo "[OfficeEditor] 已添加 admin 到 docker 组"
 
-# 5. 启动 OnlyOffice Docker 容器
+# 4. 启动 OnlyOffice
 echo "[OfficeEditor] 启动 OnlyOffice Document Server (端口 9080)..."
 COMPOSE_DIR="$TRIM_APPDEST/docker"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
   cd "$COMPOSE_DIR"
   docker compose pull -q 2>/dev/null || docker compose pull 2>&1 | tail -3
   docker compose up -d 2>&1
-  echo "[OfficeEditor] OnlyOffice 已启动"
 else
   echo "[OfficeEditor] 警告: docker-compose.yaml 不存在"
 fi
 
-# 6. 创建 systemd 服务
+# 5. 创建 systemd 服务
 echo "[OfficeEditor] 创建 systemd 服务..."
 cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
@@ -85,12 +57,8 @@ EOF
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" 2>/dev/null || true
 systemctl start "$SERVICE_NAME" 2>/dev/null || true
-echo "[OfficeEditor] 连接器服务已启动"
 
-echo ""
 echo "[OfficeEditor] 安装完成!"
-echo "  访问: http://<FNosIP>/officeeditor/editor?path=<文件路径>"
-echo "  OnlyOffice: 端口 9080"
-echo "  连接器: 端口 10088"
-
+echo "  连接器: http://localhost:10088/health"
+echo "  OnlyOffice: http://localhost:9080/healthcheck"
 exit 0

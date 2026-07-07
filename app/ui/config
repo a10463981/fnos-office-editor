@@ -12,7 +12,7 @@
     "OfficeEditor.EditDocument": {
       "title": "用 OnlyOffice 编辑",
       "type": "url",
-      "url": "/officeeditor/editor?path={path}",
+      "url": "/editor",
       "fileTypes": ["docx", "xlsx", "pptx", "doc", "xls", "ppt", "odt", "ods", "odp"],
       "allUsers": true,
       "noDisplay": true
@@ -20,7 +20,7 @@
     "OfficeEditor.ViewDocument": {
       "title": "用 OnlyOffice 预览",
       "type": "url",
-      "url": "/officeeditor/editor?path={path}&mode=view",
+      "url": "/editor",
       "fileTypes": ["pdf", "txt", "csv", "rtf", "epub"],
       "allUsers": true,
       "noDisplay": true
