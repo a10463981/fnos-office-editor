@@ -5,25 +5,12 @@
       "icon": "images/icon_{0}.png",
       "type": "iframe",
       "url": "/",
-      "allUsers": true
-    }
-  },
-  ".file": {
-    "OfficeEditor.EditDocument": {
-      "title": "用 OnlyOffice 编辑",
-      "type": "url",
-      "url": "/editor",
-      "fileTypes": ["docx", "xlsx", "pptx", "doc", "xls", "ppt", "odt", "ods", "odp"],
       "allUsers": true,
-      "noDisplay": true
-    },
-    "OfficeEditor.ViewDocument": {
-      "title": "用 OnlyOffice 预览",
-      "type": "url",
-      "url": "/editor",
-      "fileTypes": ["pdf", "txt", "csv", "rtf", "epub"],
-      "allUsers": true,
-      "noDisplay": true
+      "noDisplay": false,
+      "fileTypes": [
+        "doc", "xls", "ppt", "docx", "xlsx", "pptx",
+        "odt", "ods", "odp", "pdf", "csv", "rtf", "txt", "epub"
+      ]
     }
   }
 }
