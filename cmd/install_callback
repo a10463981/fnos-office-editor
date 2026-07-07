@@ -1,182 +1,63 @@
 #!/bin/bash
 # ============================================================================
 # OfficeEditor - install_callback
-# 安装应用文件后执行: 构建 Go 连接器, 启动 Docker, 配置 Nginx, 启动服务
+# 安装后：部署二进制 + 创建 systemd 服务
 # ============================================================================
 set -e
 
-echo "[OfficeEditor] install_callback: 开始安装配置..."
+echo "[OfficeEditor] 开始配置..."
 
 TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}"
-TRIM_PKGETC="${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}"
-TRIM_PKGVAR="${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}"
-TRIM_PKGNAME="${TRIM_PKGNAME:-OfficeEditor}"
 SERVICE_NAME="officeeditor-connector"
 
-# ============================================================
-# 1. 部署 Go 连接器二进制
-# ============================================================
-echo "[OfficeEditor] 部署 Go 连接器..."
+# 1. 部署连接器二进制
+echo "[OfficeEditor] 部署连接器..."
 cp "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
 chmod +x /usr/local/bin/officeeditor-connector
-echo "[OfficeEditor] 连接器已部署: /usr/local/bin/officeeditor-connector"
+echo "[OfficeEditor] 连接器已部署"
 
-# ============================================================
-# 2. 创建系统用户
-# ============================================================
-if ! id -u officeeditor &>/dev/null; then
-    useradd -r -s /sbin/nologin -d "$TRIM_PKGVAR" officeeditor
-fi
+# 2. 生成随机 JWT 密钥
+JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-please-$(date +%s)")
 
-# ============================================================
-# 3. 创建配置目录
-# ============================================================
-mkdir -p "$TRIM_PKGETC"
-mkdir -p "$TRIM_PKGVAR/log"
-mkdir -p "$TRIM_PKGVAR/data"
-
-# ============================================================
-# 4. 生成连接器配置
-# ============================================================
-cat > "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
-{
-  "port": 10088,
-  "doc_server_url": "http://127.0.0.1:9080",
-  "jwt_secret": "CONFIGEOF
-# 生成随机 JWT 密钥
-JWT_SECRET=$(openssl rand -hex 32)
-echo -n "$JWT_SECRET" >> "$TRIM_PKGETC/config.json"
-cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
-",
-  "log_dir": "CONFIGEOF
-echo -n "$TRIM_PKGVAR/log" >> "$TRIM_PKGETC/config.json"
-cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
-",
-  "data_dir": "CONFIGEOF
-echo -n "$TRIM_PKGVAR/data" >> "$TRIM_PKGETC/config.json"
-cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
-",
-  "base_url": "http://localhost:10088",
-  "internal_networks": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-}
-CONFIGEOF
-
-echo "[OfficeEditor] 配置文件已生成: $TRIM_PKGETC/config.json"
-
-# ============================================================
-# 5. 配置 Nginx - 集成到 FNos 的 nginx
-# ============================================================
-echo "[OfficeEditor] 配置 Nginx..."
-
-# 检查 FNos nginx 配置目录
-NGINX_CONF_DIR="/etc/nginx/sites-enabled"
-if [ ! -d "$NGINX_CONF_DIR" ]; then
-    NGINX_CONF_DIR="/etc/nginx/conf.d"
-fi
-
-cat > "$NGINX_CONF_DIR/officeeditor.conf" << 'NGINXEOF'
-# OfficeEditor - OnlyOffice 连接器反向代理
-# 由安装脚本自动生成，请勿手动修改
-
-# 连接器 API 代理
-location /officeeditor/ {
-    proxy_pass http://127.0.0.1:10088/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Auth-Username $remote_user;
-    proxy_set_header X-Auth-UID $remote_user;
-    
-    # WebSocket 支持
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    
-    # 超时设置（大文件需要）
-    proxy_read_timeout 300s;
-    proxy_send_timeout 300s;
-    proxy_buffering off;
-}
-
-# OnlyOffice Document Server API 代理
-location /officeeditor-ds/ {
-    proxy_pass http://127.0.0.1:9080/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    
-    proxy_read_timeout 300s;
-    proxy_send_timeout 300s;
-}
-NGINXEOF
-
-# 重新加载 Nginx
-if systemctl is-active --quiet nginx; then
-    nginx -s reload || echo "警告: nginx 重载失败"
-fi
-
-echo "[OfficeEditor] Nginx 配置完成"
-
-# ============================================================
-# 6. 创建 systemd 服务
-# ============================================================
-echo "[OfficeEditor] 创建 systemd 服务..."
-
-cat > "/etc/systemd/system/$SERVICE_NAME.service" << 'SERVICEEOF'
+# 3. 创建 systemd 服务（用环境变量传参）
+cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
-Description=FNos OfficeEditor Connector - OnlyOffice Integration
-After=network.target docker.service
-Wants=docker.service
+Description=FNos OfficeEditor Connector
+After=network.target
 
 [Service]
 Type=simple
-User=root
-ExecStart=/usr/local/bin/officeeditor-connector \
-    --port 10088 \
-    --config /var/apps/OfficeEditor/etc/config.json
+ExecStart=/usr/local/bin/officeeditor-connector --port 10088
 Restart=always
 RestartSec=10
-LimitNOFILE=65536
-
-# 环境变量
-Environment=TRIM_PKGETC=/var/apps/OfficeEditor/etc
-Environment=TRIM_PKGVAR=/var/apps/OfficeEditor/var
-Environment=TRIM_APPDEST=/var/apps/OfficeEditor/target
+Environment=JWT_SECRET=$JWT_SECRET
+Environment=BASE_URL=http://localhost:10088
+Environment=TRIM_PKGVAR=${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}
 
 [Install]
 WantedBy=multi-user.target
-SERVICEEOF
+EOF
 
 systemctl daemon-reload
-echo "[OfficeEditor] Systemd 服务已创建"
+systemctl enable "$SERVICE_NAME" 2>/dev/null || true
+echo "[OfficeEditor] systemd 服务已创建"
 
-# ============================================================
-# 7. 启动 Docker 容器 (OnlyOffice Document Server)
-# ============================================================
-echo "[OfficeEditor] 启动 OnlyOffice Document Server..."
-cd "$TRIM_APPDEST/app/docker"
+# 4. 尝试启动连接器（忽略错误，用户可能会调整配置）
+systemctl start "$SERVICE_NAME" 2>/dev/null || echo "  (连接器将在系统重启后自动启动)"
 
-if [ -f "docker-compose.yaml" ]; then
-    docker compose pull
-    docker compose up -d
-    echo "[OfficeEditor] OnlyOffice Document Server 已启动"
-else
-    echo "警告: docker-compose.yaml 不存在" > "$TRIM_TEMP_LOGFILE"
-fi
-
-# ============================================================
-# 8. 启动连接器服务
-# ============================================================
-systemctl enable "$SERVICE_NAME"
-systemctl start "$SERVICE_NAME"
-echo "[OfficeEditor] 连接器服务已启动"
-
-echo "[OfficeEditor] install_callback: 安装完成!"
+echo "[OfficeEditor] 安装完成!"
+echo ""
+echo "==========================================="
+echo "  后续手动操作："
+echo "  1. 启动 OnlyOffice:"
+echo "     cd $TRIM_APPDEST/app/docker"
+echo "     docker compose up -d"
+echo ""
+echo "  2. 启动连接器:"
+echo "     systemctl start $SERVICE_NAME"
+echo ""
+echo "  3. 验证:"
+echo "     curl http://localhost:10088/health"
+echo "==========================================="
 
 exit 0
