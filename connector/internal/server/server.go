@@ -48,8 +48,8 @@ func NewServer(cfg *Config) http.Handler {
 		}
 		filePath := r.URL.Query().Get("path")
 		if filePath != "" {
-			// 重定向到编辑器页面
-			http.Redirect(w, r, "/editor?path="+url.QueryEscape(filePath), http.StatusFound)
+			// 直接渲染编辑器页面（不在 iframe 里走重定向）
+			handleEditorPage(w, r, cfg)
 			return
 		}
 		// 无文件参数，显示首页
