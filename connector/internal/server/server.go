@@ -64,6 +64,12 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("POST /api/fonts/refresh", func(w http.ResponseWriter, r *http.Request) {
 		handleFontRefresh(w)
 	})
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
+		handleGetConfig(w, cfg)
+	})
+	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
+		handleSaveConfig(w, r, cfg)
+	})
 
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
@@ -459,6 +465,60 @@ func handleFontRefresh(w http.ResponseWriter) {
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": string(out)})
+}
+
+func handleGetConfig(w http.ResponseWriter, cfg *Config) {
+	conf := loadAppConfig(cfg)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(conf)
+}
+
+func handleSaveConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
+	var conf AppConfig
+	if err := json.NewDecoder(r.Body).Decode(&conf); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+	saveAppConfig(cfg, &conf)
+	// 重启 OnlyOffice 容器应用新配置
+	restartOnlyOfficeContainer(&conf)
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+}
+
+func restartOnlyOfficeContainer(conf *AppConfig) {
+	composeDir := "/var/apps/OfficeEditor/target/docker"
+	fontsDir := conf.FontsDir
+	if fontsDir == "" { fontsDir = "/vol1/1000/fonts" }
+	cmd := exec.Command("docker", "compose", "-f", composeDir+"/docker-compose.yaml",
+		"up", "-d", "--force-recreate")
+	cmd.Env = append(os.Environ(), "FONTS_DIR="+fontsDir)
+	cmd.Dir = composeDir
+	cmd.Run()
+}
+
+type AppConfig struct {
+	FontsDir string `json:"fontsDir"`
+}
+
+func configFilePath() string {
+	d := os.Getenv("TRIM_PKGVAR")
+	if d == "" { d = "/var/apps/OfficeEditor/var" }
+	return d + "/config.json"
+}
+
+func loadAppConfig(cfg *Config) *AppConfig {
+	data, err := os.ReadFile(configFilePath())
+	if err != nil { return &AppConfig{FontsDir: "/vol1/1000/fonts"} }
+	var c AppConfig
+	json.Unmarshal(data, &c)
+	if c.FontsDir == "" { c.FontsDir = "/vol1/1000/fonts" }
+	return &c
+}
+
+func saveAppConfig(cfg *Config, c *AppConfig) {
+	os.MkdirAll(filepath.Dir(configFilePath()), 0755)
+	data, _ := json.MarshalIndent(c, "", "  ")
+	os.WriteFile(configFilePath(), data, 0644)
 }
 
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
