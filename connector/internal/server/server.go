@@ -40,6 +40,27 @@ func NewServer(cfg *Config) http.Handler {
 		})
 	})
 
+	// 根路由 - 如果带 path 参数则跳转到编辑器
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		filePath := r.URL.Query().Get("path")
+		if filePath != "" {
+			// 重定向到编辑器页面
+			http.Redirect(w, r, "/editor?path="+url.QueryEscape(filePath), http.StatusFound)
+			return
+		}
+		// 无文件参数，显示首页
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>FNos 办公编辑器</title>
+<style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f5f7fa;color:#333}.c{text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.1)}h1{color:#1a73e8;font-size:28px}p{color:#666}</style>
+</head><body><div class="c"><h1>📄 FNos 办公编辑器</h1><p>基于 OnlyOffice 的在线文档编辑器</p><p style="color:#34a853">✅ 服务运行中</p><p>右键 Office 文件 → 选择 FNos 办公编辑器 即可编辑</p></div></body></html>`)
+	})
+
 	// API: 编辑器配置
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
