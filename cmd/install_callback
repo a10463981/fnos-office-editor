@@ -17,14 +17,18 @@ cp "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-
 chmod +x /usr/local/bin/officeeditor-connector 2>/dev/null || true
 echo "[OfficeEditor] 连接器已部署"
 
-# 2. 添加 admin 到 docker 组
-gpasswd -a admin docker 2>/dev/null || true
-usermod -aG docker admin 2>/dev/null || true
+# 2. 生成随机 JWT 密钥
+JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
+export JWT_SECRET
+echo "[OfficeEditor] JWT 密钥已生成"
+
+# 3. 添加 admin 到 docker 组
+gpasswd -a admin docker 2>/dev/null || usermod -aG docker admin 2>/dev/null || true
 echo "[OfficeEditor] 已添加 admin 到 docker 组"
 
-# 3. 启动 OnlyOffice Docker 容器
-echo "[OfficeEditor] 启动 OnlyOffice Document Server..."
-COMPOSE_DIR="$TRIM_APPDEST/app/docker"
+# 4. 启动 OnlyOffice Docker 容器
+echo "[OfficeEditor] 启动 OnlyOffice Document Server (端口 9080)..."
+COMPOSE_DIR="$TRIM_APPDEST/docker"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
   cd "$COMPOSE_DIR"
   docker compose pull -q 2>/dev/null || docker compose pull 2>&1 | tail -3

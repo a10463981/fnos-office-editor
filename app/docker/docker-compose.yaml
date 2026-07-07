@@ -8,23 +8,17 @@ services:
     image: onlyoffice/documentserver:latest
     container_name: officeeditor-docserver
     restart: unless-stopped
-    network_mode: "host"
+    ports:
+      - "9080:80"    # OnlyOffice HTTP API
     environment:
-      # JWT 安全认证
       - JWT_ENABLED=true
       - JWT_SECRET=${JWT_SECRET:-officeeditor-default-secret}
-      # 日志级别
       - LOG_LEVEL=warn
-      # 数据保存间隔（秒）
-      - SAVE_TIMEOUT=30
     volumes:
-      # 文档缓存和临时文件
       - officeeditor-ds-cache:/var/lib/onlyoffice
       - officeeditor-ds-data:/var/www/onlyoffice/Data
       - officeeditor-ds-log:/var/log/onlyoffice
-      # 字体目录
       - officeeditor-ds-fonts:/usr/share/fonts
-    # 如果没有 JWT_SECRET 环境变量，使用默认值
     labels:
       - "app.officeeditor.managed=true"
 
