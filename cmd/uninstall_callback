@@ -3,7 +3,7 @@
 # OfficeEditor - uninstall_callback
 # 安全卸载: 用户确认后才删除
 # ============================================================================
-set -e
+#set -e (removed for resilience)
 
 echo "[OfficeEditor] ===== 开始卸载 ====="
 

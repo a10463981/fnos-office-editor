@@ -3,7 +3,7 @@
 # OfficeEditor - install_init
 # 在安装应用文件前执行
 # ============================================================================
-set -e
+#set -e (removed for resilience)
 
 echo "[OfficeEditor] install_init: 开始安装前准备..."
 

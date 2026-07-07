@@ -3,7 +3,7 @@
 # OfficeEditor - uninstall_init
 # 卸载前执行: 停止所有服务
 # ============================================================================
-set -e
+#set -e (removed for resilience)
 
 echo "[OfficeEditor] uninstall_init: 停止服务..."
 

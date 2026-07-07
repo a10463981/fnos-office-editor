@@ -3,7 +3,7 @@
 # OfficeEditor - upgrade_callback
 # 升级后执行: 更新连接器二进制, 重启服务
 # ============================================================================
-set -e
+#set -e (removed for resilience)
 
 echo "[OfficeEditor] upgrade_callback: 应用升级..."
 

@@ -3,7 +3,7 @@
 # OfficeEditor - upgrade_init
 # 升级前执行: 备份配置和数据
 # ============================================================================
-set -e
+#set -e (removed for resilience)
 
 echo "[OfficeEditor] upgrade_init: 备份配置..."
 
