@@ -73,6 +73,9 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w)
 	})
+	mux.HandleFunc("GET /api/check-update", func(w http.ResponseWriter, r *http.Request) {
+		handleCheckUpdate(w)
+	})
 
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
@@ -596,6 +599,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .modal .btn-save{background:#1a73e8;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 .modal .btn-cancel{background:#f0f0f0;color:#333;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 </style></head><body>
+<div id="updateBar" style="display:none;background:#e74c3c;color:#fff;text-align:center;padding:6px;font-size:13px"></div>
 <div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 office 协作</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn IS_ADMIN_PLACEHOLDER" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
 <div class="content">
   <div class="section">
@@ -605,6 +609,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <button class="btn btn-excel" onclick="createDoc('xlsx')"><span>📊</span> Excel 表格</button>
       <button class="btn btn-ppt" onclick="createDoc('pptx')"><span>📽️</span> PPT 演示</button>
     </div>
+    <p style="font-size:12px;color:#999;margin-top:8px">📁 新建文件将保存在您的个人目录中</p>
   </div>
   <div class="section">
     <h2>最近打开</h2>
@@ -613,7 +618,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
   <div class="section" style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px solid #eee">
     <h2>赞助支持</h2>
-    <p style="font-size:13px;color:#666;margin-bottom:12px">如果这个项目对你有帮助，欢迎扫码赞助！</p>
+    <p style="font-size:13px;color:#666;margin-bottom:12px">你的赞助是我更新的动力 💪</p>
     <div>
       <img id="wechatQr" style="width:160px;margin:0 8px" alt="微信赞助">
       <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
@@ -690,6 +695,7 @@ function saveSettings(){
 
 document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
 document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
+fetch(apiBase+"/api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
 loadHistory();
 </script>
 </body></html>`
@@ -722,6 +728,30 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 }
 
 const AppVersion = "1.0.02"
+
+func handleCheckUpdate(w http.ResponseWriter) {
+	// Check GitHub for latest release
+	resp, err := http.Get("https://api.github.com/repos/a10463981/fnos-office-editor/releases/latest")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"update": false, "error": "network"})
+		return
+	}
+	defer resp.Body.Close()
+	var release struct {
+		TagName string 
+		HTMLURL string 
+	}
+	json.NewDecoder(resp.Body).Decode(&release)
+	latest := strings.TrimPrefix(release.TagName, "v")
+	hasUpdate := latest != "" && latest != AppVersion
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"update":    hasUpdate,
+		"current":   AppVersion,
+		"latest":    latest,
+		"url":       release.HTMLURL,
+	})
+}
 
 func handleVersion(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
