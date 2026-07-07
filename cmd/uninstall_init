@@ -12,7 +12,7 @@ systemctl stop officeeditor-connector 2>/dev/null || true
 systemctl disable officeeditor-connector 2>/dev/null || true
 
 # 停止 OnlyOffice Docker 容器
-COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
+COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/officeeditor-docker"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
   cd "$COMPOSE_DIR"
   docker compose stop 2>/dev/null || true

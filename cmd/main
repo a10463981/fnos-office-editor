@@ -6,7 +6,7 @@
 set -e
 
 SERVICE_NAME="officeeditor-connector"
-COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/app/officeeditor-docker"
+COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/officeeditor-docker"
 
 case "$1" in
     start)
