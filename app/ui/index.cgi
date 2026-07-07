@@ -15,6 +15,20 @@ fnos_host = '127.0.0.1'
 m = re.search(r'https?://([^/:]+)', referer)
 if m: fnos_host = m.group(1)
 connector_base = f'http://127.0.0.1:10088'
+
+# ---- 赞助图片 ----
+if '/sponsor/' in os.environ.get('REQUEST_URI', ''):
+    img_name = 'donate-wechat.png' if 'wechat' in os.environ.get('REQUEST_URI', '') else 'donate-alipay.png'
+    img_path = f'{os.environ.get("TRIM_APPDEST", "/var/apps/OfficeEditor/target")}/ui/images/{img_name}'
+    if os.path.exists(img_path):
+        print(f'Content-Type: image/png')
+        print()
+        with open(img_path, 'rb') as f:
+            sys.stdout.buffer.write(f.read())
+    else:
+        print('Status: 404')
+        print()
+    sys.exit(0)
 api_base = f'http://{fnos_host}:10088'
 
 if action == 'create':
