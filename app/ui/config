@@ -9,34 +9,18 @@
     }
   },
   ".file": {
-    "OfficeEditor.OpenDocument": {
+    "OfficeEditor.EditDocument": {
       "title": "用 OnlyOffice 编辑",
       "type": "url",
-      "url": "/editor?path={path}",
-      "fileTypes": ["docx", "xlsx", "pptx"],
-      "allUsers": true,
-      "noDisplay": true
-    },
-    "OfficeEditor.OpenLegacyDocument": {
-      "title": "用 OnlyOffice 打开",
-      "type": "url",
-      "url": "/editor?path={path}",
-      "fileTypes": ["doc", "xls", "ppt"],
-      "allUsers": true,
-      "noDisplay": true
-    },
-    "OfficeEditor.OpenODF": {
-      "title": "用 OnlyOffice 打开",
-      "type": "url",
-      "url": "/editor?path={path}",
-      "fileTypes": ["odt", "ods", "odp"],
+      "url": "/officeeditor/editor?path={path}",
+      "fileTypes": ["docx", "xlsx", "pptx", "doc", "xls", "ppt", "odt", "ods", "odp"],
       "allUsers": true,
       "noDisplay": true
     },
     "OfficeEditor.ViewDocument": {
       "title": "用 OnlyOffice 预览",
       "type": "url",
-      "url": "/editor?path={path}&mode=view",
+      "url": "/officeeditor/editor?path={path}&mode=view",
       "fileTypes": ["pdf", "txt", "csv", "rtf", "epub"],
       "allUsers": true,
       "noDisplay": true
