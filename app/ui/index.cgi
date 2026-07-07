@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, urllib.parse, subprocess, re
+import os, urllib.parse, subprocess, re, sys
 
 qs = os.environ.get('QUERY_STRING', '')
 params = urllib.parse.parse_qs(qs)
