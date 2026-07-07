@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================================
 # OfficeEditor - uninstall_callback
-# 彻底清理: 容器/卷/二进制/nginx/数据 全部移除
+# 彻底清理: 容器/卷/网络/二进制/nginx/数据
 # ============================================================================
 set -e
 
@@ -10,58 +10,51 @@ echo "[OfficeEditor] ===== 开始彻底卸载 ====="
 TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}"
 PRESERVE_DATA="${PRESERVE_DATA:-false}"
 
-# 1. 停止并删除 OnlyOffice Docker 容器 + 卷 + 网络
-echo "[OfficeEditor] 1/6 清理 Docker..."
+# 1. 停止并删除 ONLYOFFICE DOCKER（直接用绝对路径和容器名）
+echo "[OfficeEditor] 1/5 清理 Docker..."
+docker stop officeeditor-docserver 2>/dev/null || true
+docker rm -f officeeditor-docserver 2>/dev/null || true
+
+# 用 compose down（如果 compose 文件还在）
 COMPOSE_DIR="$TRIM_APPDEST/docker"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
-  cd "$COMPOSE_DIR"
-  docker compose down -v --remove-orphans 2>/dev/null || true
+  cd "$COMPOSE_DIR" 2>/dev/null && docker compose down -v --remove-orphans 2>/dev/null || true
 fi
 
-# 手动清理可能残留的容器和卷
-docker rm -f officeeditor-docserver 2>/dev/null || true
+# 删除 Docker 卷
 docker volume rm officeeditor-ds-cache officeeditor-ds-data officeeditor-ds-log officeeditor-ds-fonts 2>/dev/null || true
-docker network rm docker_default 2>/dev/null || true
 echo "[OfficeEditor] Docker 清理完成"
 
 # 2. 移除 systemd 服务
-echo "[OfficeEditor] 2/6 移除 systemd 服务..."
+echo "[OfficeEditor] 2/5 移除 systemd 服务..."
 systemctl stop officeeditor-connector 2>/dev/null || true
 systemctl disable officeeditor-connector 2>/dev/null || true
 rm -f /etc/systemd/system/officeeditor-connector.service
-systemctl daemon-reload
+systemctl daemon-reload 2>/dev/null || true
 echo "[OfficeEditor] systemd 服务已移除"
 
-# 3. 移除连接器二进制
-echo "[OfficeEditor] 3/6 移除二进制..."
+# 3. 移除二进制
+echo "[OfficeEditor] 3/5 移除二进制..."
 rm -f /usr/local/bin/officeeditor-connector
 echo "[OfficeEditor] 二进制已移除"
 
-# 4. 移除所有 nginx 配置
-echo "[OfficeEditor] 4/6 清理 nginx 配置..."
-rm -f /usr/trim/nginx/conf/conf.d/officeeditor.conf 2>/dev/null || true
-rm -f /usr/trim/nginx/conf/conf.d/officeeditor-officeds.conf 2>/dev/null || true
-rm -f /etc/nginx/conf.d/officeeditor.conf 2>/dev/null || true
-rm -f /etc/nginx/sites-enabled/officeeditor.conf 2>/dev/null || true
+# 4. 移除所有 nginx 配置并重载
+echo "[OfficeEditor] 4/5 清理 nginx 配置..."
+rm -f /usr/trim/nginx/conf/conf.d/officeeditor*.conf 2>/dev/null || true
+rm -f /etc/nginx/conf.d/officeeditor*.conf 2>/dev/null || true
+rm -f /etc/nginx/sites-enabled/officeeditor*.conf 2>/dev/null || true
 /usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || nginx -s reload 2>/dev/null || true
 echo "[OfficeEditor] nginx 配置已清理"
 
-# 5. 移除安装时创建的脚本
-echo "[OfficeEditor] 5/6 清理临时文件..."
-rm -f /tmp/officeeditor-connector 2>/dev/null || true
-rm -f /tmp/install_oo.sh 2>/dev/null || true
-rm -f /tmp/run_as_root.sh 2>/dev/null || true
-echo "[OfficeEditor] 临时文件已清理"
-
-# 6. 清理数据目录（如不保留）
+# 5. 清理数据目录
 if [ "$PRESERVE_DATA" != "true" ]; then
-  echo "[OfficeEditor] 6/6 清理所有数据..."
+  echo "[OfficeEditor] 5/5 清理所有数据..."
   rm -rf "${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}" 2>/dev/null || true
   rm -rf "${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}" 2>/dev/null || true
-  rm -rf "${TRIM_APPDEST}" 2>/dev/null || true
+  rm -f /var/apps/OfficeEditor/history.json 2>/dev/null || true
   echo "[OfficeEditor] 数据已清理"
 else
-  echo "[OfficeEditor] 6/6 用户数据已保留 (var + etc + history.json)"
+  echo "[OfficeEditor] 5/5 用户数据已保留"
 fi
 
 echo "[OfficeEditor] ===== 卸载完成 ====="
