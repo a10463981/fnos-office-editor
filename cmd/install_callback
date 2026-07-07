@@ -28,7 +28,7 @@ COMPOSE_DIR="$TRIM_APPDEST/docker"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
   cd "$COMPOSE_DIR"
   docker compose pull -q 2>/dev/null || docker compose pull 2>&1 | tail -3
-  docker compose up -d 2>&1
+  docker compose up -d --force-recreate 2>&1
 else
   echo "[OfficeEditor] 警告: docker-compose.yaml 不存在"
 fi
