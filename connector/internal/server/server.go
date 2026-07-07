@@ -512,7 +512,7 @@ function createDoc(type){
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
-      window.location.href="/editor?path="+encodeURIComponent(d.path);
+      window.location.href="/cgi/ThirdParty/OfficeEditor/index.cgi?path="+encodeURIComponent(d.path);
     })
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
@@ -525,7 +525,7 @@ function loadHistory(){
       var icons={"docx":"📝","xlsx":"📊","pptx":"📽️","doc":"📝","xls":"📊","ppt":"📽️","pdf":"📕","txt":"📄"};
       h.innerHTML=items.map(function(i){
         var ext=i.name.split(".").pop().toLowerCase();
-        return '<a class="history-item" href="/editor?path='+encodeURIComponent(i.path)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
+        return '<a class="history-item" href="/cgi/ThirdParty/OfficeEditor/index.cgi?path='+encodeURIComponent(i.path)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
       }).join("");
     })
 }
