@@ -339,7 +339,19 @@ const editorPageHTML = `<!DOCTYPE html>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
 <script src="%s/web-apps/apps/api/documents/api.js"></script>
-<script>new DocsAPI.DocEditor("editor",%s);</script>
+<script>
+var config=%s;
+var editor=new DocsAPI.DocEditor("editor",config);
+
+// 浏览器切回前台时检测连接状态，断开则自动重连
+var wasDisconnected=false;
+editor.on("onRequestClose",function(){wasDisconnected=true;});
+document.addEventListener("visibilitychange",function(){
+    if(!document.hidden && wasDisconnected){
+        location.reload();
+    }
+});
+</script>
 </body></html>`
 
 func base64URLEncode(data []byte) string {
