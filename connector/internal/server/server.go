@@ -231,8 +231,6 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		docSvrURL = cfg.DocServerPubURL
 	}
 
-	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
