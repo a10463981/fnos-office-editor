@@ -86,6 +86,9 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
 	})
+	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
+		handleSponsorImage(w, r)
+	})
 	return corsHandler(mux)
 }
 
@@ -612,8 +615,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
     <h2>赞助支持</h2>
     <p style="font-size:13px;color:#666;margin-bottom:12px">如果这个项目对你有帮助，欢迎扫码赞助！</p>
     <div>
-      <img src="/cgi/ThirdParty/OfficeEditor/sponsor/wechat" style="width:160px;margin:0 8px" alt="wechat">
-      <img src="/cgi/ThirdParty/OfficeEditor/sponsor/alipay" style="width:160px;margin:0 8px" alt="alipay">
+      <img id="wechatQr" style="width:160px;margin:0 8px" alt="微信赞助">
+      <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
       GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.00
@@ -683,6 +686,11 @@ function saveSettings(){
     .catch(e=>{toast("保存失败: "+e.message);})
     .finally(function(){btn.disabled=false;btn.textContent="保存并生效";});
 }
+
+var imgs=document.querySelectorAll(.sponsor-img);
+imgs.forEach(function(img){img.src=apiBase+/+img.getAttribute(data-src)});
+document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
+document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
 loadHistory();
 </script>
 </body></html>`
@@ -702,6 +710,16 @@ func corsHandler(next http.Handler) http.Handler {
 
 func base64URLEncode(data []byte) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
+}
+
+func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
+	// Serve sponsor QR images from app/ui/images/
+	basePath := "/var/apps/OfficeEditor/target/ui/images"
+	if r.URL.Path == "/sponsor/wechat" {
+		http.ServeFile(w, r, basePath+"/donate-wechat.png")
+	} else {
+		http.ServeFile(w, r, basePath+"/donate-alipay.png")
+	}
 }
 
 const AppVersion = "1.0.00"
