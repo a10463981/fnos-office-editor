@@ -20,6 +20,15 @@ FNos 原生 Office 在线协作编辑器。基于 [OnlyOffice](https://www.onlyo
 
 ---
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshot-1.png" width="45%" alt="首页界面">
+  <img src="docs/screenshot-2.png" width="45%" alt="编辑界面">
+</p>
+
+---
+
 ## 下载安装
 
 ### 方式一：应用中心手动安装（推荐）
