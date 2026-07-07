@@ -13,7 +13,7 @@ chmod +x /usr/local/bin/officeeditor-connector
 systemctl restart officeeditor-connector
 
 # 更新 Docker 镜像
-cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/app/docker"
+cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/app/officeeditor-docker"
 docker compose pull
 docker compose up -d
 
