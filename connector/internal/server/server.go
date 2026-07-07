@@ -567,8 +567,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .toast.show{opacity:1}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.settings-btn{cursor:pointer;font-size:24px;opacity:.8;transition:opacity .2s}.settings-btn:hover{opacity:1}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;justify-content:center;align-items:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:12px;padding:28px;width:90%;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
+.modal h3{font-size:18px;margin-bottom:16px}
+.modal label{font-size:13px;color:#666;display:block;margin-bottom:6px}
+.modal input{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;margin-bottom:16px}
+.modal .actions{display:flex;gap:8px;justify-content:flex-end}
+.modal .btn-save{background:#1a73e8;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
+.modal .btn-cancel{background:#f0f0f0;color:#333;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 </style></head><body>
-<div class="header"><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div>
+<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
 <div class="content">
   <div class="section">
     <h2>新建文档</h2>
@@ -581,6 +591,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
   <div class="section">
     <h2>最近打开</h2>
     <div class="history-list" id="history"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>⚙️ 字体设置</h3>
+    <label>自定义字体目录路径（.ttf/.otf 文件将自动加载到 OnlyOffice）</label>
+    <input type="text" id="fontsDirInput" placeholder="/vol1/1000/我的字体/">
+    <div class="actions">
+      <button class="btn-cancel" onclick="closeSettings()">取消</button>
+      <button class="btn-save" onclick="saveSettings()">保存并生效</button>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -612,6 +633,21 @@ function loadHistory(){
         return '<a class="history-item" href="/cgi/ThirdParty/OfficeEditor/index.cgi?path='+encodeURIComponent(i.path)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
       }).join("");
     })
+}
+function openSettings(){
+  document.getElementById("settingsModal").classList.add("show");
+  fetch(apiBase+"/api/config").then(r=>r.json()).then(c=>{
+    document.getElementById("fontsDirInput").value=c.fontsDir||"";
+  });
+}
+function closeSettings(){
+  document.getElementById("settingsModal").classList.remove("show");
+}
+function saveSettings(){
+  var dir=document.getElementById("fontsDirInput").value.trim();
+  fetch(apiBase+"/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
+    .then(r=>r.json()).then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败");closeSettings();})
+    .catch(e=>{toast("保存失败")});
 }
 loadHistory();
 </script>
