@@ -494,6 +494,11 @@ func restartOnlyOfficeContainer(conf *AppConfig) {
 	cmd.Env = append(os.Environ(), "FONTS_DIR="+fontsDir)
 	cmd.Dir = composeDir
 	cmd.Run()
+	// Wait for container to start, then rebuild font cache
+	time.Sleep(5 * time.Second)
+	exec.Command("docker", "exec", "officeeditor-docserver", "fc-cache", "-fv").Run()
+	// Also restart document server services to pick up new fonts
+	exec.Command("docker", "exec", "officeeditor-docserver", "supervisorctl", "restart", "all").Run()
 }
 
 type AppConfig struct {
