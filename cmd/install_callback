@@ -53,7 +53,7 @@ mkdir -p "$TRIM_PKGVAR/data"
 # ============================================================
 cat > "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
 {
-  "port": 10099,
+  "port": 10088,
   "doc_server_url": "http://127.0.0.1:9080",
   "jwt_secret": "CONFIGEOF
 # 生成随机 JWT 密钥
@@ -69,7 +69,7 @@ cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
 echo -n "$TRIM_PKGVAR/data" >> "$TRIM_PKGETC/config.json"
 cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
 ",
-  "base_url": "http://localhost:10099",
+  "base_url": "http://localhost:10088",
   "internal_networks": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 }
 CONFIGEOF
@@ -93,7 +93,7 @@ cat > "$NGINX_CONF_DIR/officeeditor.conf" << 'NGINXEOF'
 
 # 连接器 API 代理
 location /officeeditor/ {
-    proxy_pass http://127.0.0.1:10099/;
+    proxy_pass http://127.0.0.1:10088/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -151,7 +151,7 @@ Wants=docker.service
 Type=simple
 User=root
 ExecStart=/usr/local/bin/officeeditor-connector \
-    --port 10099 \
+    --port 10088 \
     --config /var/apps/OfficeEditor/etc/config.json
 Restart=always
 RestartSec=10

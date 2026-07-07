@@ -33,4 +33,4 @@ echo "安装到 FNos..."
 ssh "$SSH_USER@$FNOS_IP" "appcenter-cli install-fpk /tmp/OfficeEditor.fpk"
 
 echo "部署完成!"
-echo "访问: http://$FNOS_IP:10099/health"
+echo "访问: http://$FNOS_IP:10088/health"

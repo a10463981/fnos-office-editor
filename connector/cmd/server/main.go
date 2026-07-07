@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 10099, "监听端口")
+	port := flag.Int("port", 10088, "监听端口")
 	docSvr := flag.String("doc-server", "http://127.0.0.1:9080", "OnlyOffice Document Server 地址")
 	jwtSecret := flag.String("jwt-secret", "", "JWT 密钥")
 	baseURL := flag.String("base-url", "", "内网连接器地址")

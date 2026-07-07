@@ -34,7 +34,7 @@ if ! docker compose version &>/dev/null; then
 fi
 
 # 检查必要端口
-for port in 10099 9080; do
+for port in 10088 9080; do
     if ss -tlnp | grep -q ":$port "; then
         echo "端口 $port 已被占用" >> "$TRIM_TEMP_LOGFILE"
     fi
