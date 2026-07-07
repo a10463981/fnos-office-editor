@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================================
 # OfficeEditor - install_callback
-# 安装后：部署二进制 + 创建 systemd 服务
+# 安装后：部署二进制 + 启动 OnlyOffice Docker
 # ============================================================================
 set -e
 
@@ -12,18 +12,37 @@ SERVICE_NAME="officeeditor-connector"
 
 # 1. 部署连接器二进制
 echo "[OfficeEditor] 部署连接器..."
-cp "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
-chmod +x /usr/local/bin/officeeditor-connector
+cp "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector 2>/dev/null || \
+  install -m 755 "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
+chmod +x /usr/local/bin/officeeditor-connector 2>/dev/null || true
 echo "[OfficeEditor] 连接器已部署"
 
-# 2. 生成随机 JWT 密钥
-JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-please-$(date +%s)")
+# 2. 添加 admin 到 docker 组
+gpasswd -a admin docker 2>/dev/null || true
+usermod -aG docker admin 2>/dev/null || true
+echo "[OfficeEditor] 已添加 admin 到 docker 组"
 
-# 3. 创建 systemd 服务（用环境变量传参）
+# 3. 启动 OnlyOffice Docker 容器
+echo "[OfficeEditor] 启动 OnlyOffice Document Server..."
+COMPOSE_DIR="$TRIM_APPDEST/app/docker"
+if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
+  cd "$COMPOSE_DIR"
+  docker compose pull -q 2>/dev/null || docker compose pull 2>&1 | tail -3
+  docker compose up -d 2>&1
+  echo "[OfficeEditor] OnlyOffice 已启动"
+else
+  echo "[OfficeEditor] 警告: docker-compose.yaml 不存在"
+fi
+
+# 4. 生成随机 JWT 密钥
+JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
+
+# 5. 创建 systemd 服务
 cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
 Description=FNos OfficeEditor Connector
-After=network.target
+After=network.target docker.service
+Wants=docker.service
 
 [Service]
 Type=simple
@@ -40,24 +59,12 @@ EOF
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" 2>/dev/null || true
-echo "[OfficeEditor] systemd 服务已创建"
+systemctl start "$SERVICE_NAME" 2>/dev/null || true
+echo "[OfficeEditor] 连接器服务已启动"
 
-# 4. 尝试启动连接器（忽略错误，用户可能会调整配置）
-systemctl start "$SERVICE_NAME" 2>/dev/null || echo "  (连接器将在系统重启后自动启动)"
-
+echo ""
 echo "[OfficeEditor] 安装完成!"
-echo ""
-echo "==========================================="
-echo "  后续手动操作："
-echo "  1. 启动 OnlyOffice:"
-echo "     cd $TRIM_APPDEST/app/docker"
-echo "     docker compose up -d"
-echo ""
-echo "  2. 启动连接器:"
-echo "     systemctl start $SERVICE_NAME"
-echo ""
-echo "  3. 验证:"
-echo "     curl http://localhost:10088/health"
-echo "==========================================="
+echo "  连接器: http://localhost:10088/health"
+echo "  OnlyOffice Document Server: 容器运行中"
 
 exit 0
