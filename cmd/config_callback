@@ -3,7 +3,6 @@
 # OfficeEditor - config_callback
 # 配置变更后执行: 应用新配置并重启服务
 # ============================================================================
-#set -e (removed for resilience)
 
 echo "[OfficeEditor] config_callback: 应用新配置..."
 

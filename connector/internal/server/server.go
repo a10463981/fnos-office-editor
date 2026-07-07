@@ -492,7 +492,7 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 }
 
 func restartOnlyOfficeContainer(conf *AppConfig) {
-	composeDir := "/var/apps/OfficeEditor/target/officeeditor-docker"
+	composeDir := "/var/apps/OfficeEditor/target/docker"
 	fontsDir := conf.FontsDir
 	if fontsDir == "" { fontsDir = "/vol1/1000/fonts" }
 	cmd := exec.Command("docker", "compose", "-f", composeDir+"/docker-compose.yaml",
@@ -721,7 +721,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.01"
+const AppVersion = "1.0.02"
 
 func handleVersion(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")

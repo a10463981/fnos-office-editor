@@ -2,7 +2,7 @@
   "docker-compose": [
     {
       "name": "onlyoffice-docserver",
-      "compose-path": "app/officeeditor-docker/docker-compose.yaml"
+      "compose-path": "app/docker/docker-compose.yaml"
     }
   ]
 }

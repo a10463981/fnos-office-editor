@@ -3,7 +3,6 @@
 # OfficeEditor - uninstall_init
 # 卸载前执行: 停止所有服务
 # ============================================================================
-#set -e (removed for resilience)
 
 echo "[OfficeEditor] uninstall_init: 停止服务..."
 
@@ -12,7 +11,7 @@ systemctl stop officeeditor-connector 2>/dev/null || true
 systemctl disable officeeditor-connector 2>/dev/null || true
 
 # 停止 OnlyOffice Docker 容器
-COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/officeeditor-docker"
+COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
   cd "$COMPOSE_DIR"
   docker compose stop 2>/dev/null || true

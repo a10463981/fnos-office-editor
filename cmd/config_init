@@ -3,7 +3,6 @@
 # OfficeEditor - config_init
 # 配置变更前执行: 备份当前配置
 # ============================================================================
-#set -e (removed for resilience)
 
 echo "[OfficeEditor] config_init: 备份当前配置..."
 

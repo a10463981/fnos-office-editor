@@ -32,7 +32,7 @@ cd "$PROJECT_DIR"
 required_dirs=(
     "app/www"
     "app/ui/images"
-    "app/officeeditor-docker"
+    "app/docker"
     "cmd"
     "config"
     "wizard/install"

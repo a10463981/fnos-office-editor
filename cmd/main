@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================================
+set -e
 # OfficeEditor - cmd/main
 # 应用运行控制: start / stop / status
 # ============================================================================
-#set -e (removed for resilience)
 
 SERVICE_NAME="officeeditor-connector"
-COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/officeeditor-docker"
+COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
 
 case "$1" in
     start)
