@@ -1,0 +1,23 @@
+[
+  {
+    "stepTitle": "确认卸载",
+    "title": "确认卸载 FNos 办公编辑器",
+    "desc": "请选择要删除的内容：",
+    "fields": [
+      {
+        "id": "remove_docker",
+        "label": "删除 OnlyOffice Docker 容器和镜像数据",
+        "type": "checkbox",
+        "default": true,
+        "description": "容器: officeeditor-docserver，卷: officeeditor-ds-* (约2GB)"
+      },
+      {
+        "id": "remove_data",
+        "label": "删除应用配置和编辑历史",
+        "type": "checkbox",
+        "default": true,
+        "description": "包括: systemd服务, nginx配置, 连接器二进制, 历史记录"
+      }
+    ]
+  }
+]

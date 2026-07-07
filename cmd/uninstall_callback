@@ -1,60 +1,67 @@
 #!/bin/bash
 # ============================================================================
 # OfficeEditor - uninstall_callback
-# 彻底清理: 容器/卷/网络/二进制/nginx/数据
+# 安全卸载: 用户确认后才删除
 # ============================================================================
 set -e
 
-echo "[OfficeEditor] ===== 开始彻底卸载 ====="
+echo "[OfficeEditor] ===== 开始卸载 ====="
 
-TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}"
-PRESERVE_DATA="${PRESERVE_DATA:-false}"
+# 读取用户选择（由 wizard 勾选决定）
+REMOVE_DOCKER="${REMOVE_DOCKER:-true}"
+REMOVE_DATA="${REMOVE_DATA:-true}"
 
-# 1. 停止并删除 ONLYOFFICE DOCKER（直接用绝对路径和容器名）
-echo "[OfficeEditor] 1/5 清理 Docker..."
-docker stop officeeditor-docserver 2>/dev/null || true
-docker rm -f officeeditor-docserver 2>/dev/null || true
-
-# 用 compose down（如果 compose 文件还在）
-COMPOSE_DIR="$TRIM_APPDEST/docker"
-if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
-  cd "$COMPOSE_DIR" 2>/dev/null && docker compose down -v --remove-orphans 2>/dev/null || true
+# 1. 清理 OnlyOffice Docker（精确名称，不用通配符）
+if [ "$REMOVE_DOCKER" = "true" ]; then
+  echo "[OfficeEditor] 清理 Docker..."
+  
+  # 先尝试 compose down（如果有 compose 文件）
+  COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
+  if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
+    cd "$COMPOSE_DIR" 2>/dev/null
+    docker compose down -v --remove-orphans 2>/dev/null || true
+  fi
+  
+  # 直接用精确名称确保安全
+  docker stop  officeeditor-docserver  2>/dev/null || true
+  docker rm -f officeeditor-docserver  2>/dev/null || true
+  docker volume rm -f officeeditor-ds-cache  2>/dev/null || true
+  docker volume rm -f officeeditor-ds-data   2>/dev/null || true
+  docker volume rm -f officeeditor-ds-log    2>/dev/null || true
+  docker volume rm -f officeeditor-ds-fonts  2>/dev/null || true
+  
+  echo "[OfficeEditor] Docker 已清理"
+else
+  echo "[OfficeEditor] 跳过 Docker 清理"
 fi
 
-# 删除 Docker 卷
-docker volume rm officeeditor-ds-cache officeeditor-ds-data officeeditor-ds-log officeeditor-ds-fonts 2>/dev/null || true
-echo "[OfficeEditor] Docker 清理完成"
-
-# 2. 移除 systemd 服务
-echo "[OfficeEditor] 2/5 移除 systemd 服务..."
-systemctl stop officeeditor-connector 2>/dev/null || true
-systemctl disable officeeditor-connector 2>/dev/null || true
-rm -f /etc/systemd/system/officeeditor-connector.service
-systemctl daemon-reload 2>/dev/null || true
-echo "[OfficeEditor] systemd 服务已移除"
-
-# 3. 移除二进制
-echo "[OfficeEditor] 3/5 移除二进制..."
-rm -f /usr/local/bin/officeeditor-connector
-echo "[OfficeEditor] 二进制已移除"
-
-# 4. 移除所有 nginx 配置并重载
-echo "[OfficeEditor] 4/5 清理 nginx 配置..."
-rm -f /usr/trim/nginx/conf/conf.d/officeeditor*.conf 2>/dev/null || true
-rm -f /etc/nginx/conf.d/officeeditor*.conf 2>/dev/null || true
-rm -f /etc/nginx/sites-enabled/officeeditor*.conf 2>/dev/null || true
-/usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || nginx -s reload 2>/dev/null || true
-echo "[OfficeEditor] nginx 配置已清理"
-
-# 5. 清理数据目录
-if [ "$PRESERVE_DATA" != "true" ]; then
-  echo "[OfficeEditor] 5/5 清理所有数据..."
+# 2. 清理应用数据
+if [ "$REMOVE_DATA" = "true" ]; then
+  echo "[OfficeEditor] 清理应用数据..."
+  
+  # systemd 服务
+  systemctl stop   officeeditor-connector 2>/dev/null || true
+  systemctl disable officeeditor-connector 2>/dev/null || true
+  rm -f /etc/systemd/system/officeeditor-connector.service
+  systemctl daemon-reload 2>/dev/null || true
+  
+  # 二进制
+  rm -f /usr/local/bin/officeeditor-connector 2>/dev/null || true
+  
+  # nginx 配置
+  rm -f /usr/trim/nginx/conf/conf.d/officeeditor.conf       2>/dev/null || true
+  rm -f /usr/trim/nginx/conf/conf.d/officeeditor-officeds.conf 2>/dev/null || true
+  rm -f /etc/nginx/conf.d/officeeditor.conf                 2>/dev/null || true
+  rm -f /etc/nginx/sites-enabled/officeeditor.conf          2>/dev/null || true
+  /usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || nginx -s reload 2>/dev/null || true
+  
+  # 数据目录
   rm -rf "${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}" 2>/dev/null || true
   rm -rf "${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}" 2>/dev/null || true
-  rm -f /var/apps/OfficeEditor/history.json 2>/dev/null || true
-  echo "[OfficeEditor] 数据已清理"
+  
+  echo "[OfficeEditor] 应用数据已清理"
 else
-  echo "[OfficeEditor] 5/5 用户数据已保留"
+  echo "[OfficeEditor] 保留应用数据"
 fi
 
 echo "[OfficeEditor] ===== 卸载完成 ====="
