@@ -687,8 +687,7 @@ function saveSettings(){
     .finally(function(){btn.disabled=false;btn.textContent="保存并生效";});
 }
 
-var imgs=document.querySelectorAll(.sponsor-img);
-imgs.forEach(function(img){img.src=apiBase+/+img.getAttribute(data-src)});
+
 document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
 document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
 loadHistory();
