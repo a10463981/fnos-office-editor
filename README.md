@@ -158,6 +158,20 @@ fnpack build --directory .
 
 ---
 
+---
+
+## 💰 赞助支持
+
+如果这个项目对你有帮助，欢迎扫码赞助！
+
+| 微信 | 支付宝 |
+|------|--------|
+| ![微信赞助](docs/donate-wechat.png) | ![支付宝赞助](docs/donate-alipay.png) |
+
+> 赞助后将你的 GitHub ID 留言，我会添加到致谢名单 🙏
+
+---
+
 ## 开源协议
 
 [MIT License](LICENSE)
