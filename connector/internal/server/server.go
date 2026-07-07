@@ -135,24 +135,21 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// DocServer URL - use host override if provided by CGI proxy
+	// Get effective host for URLs (from CGI proxy)
+	overrideHost := getHostOverride(r)
 	docSvrURL := cfg.DocServerURL
-	if h := getHostOverride(r); h != "" {
-		docSvrURL = "http://" + h + ":9080"
+	if overrideHost != "" {
+		docSvrURL = "http://" + overrideHost + ":9080"
+	}
+	baseURL := cfg.BaseURL
+	if overrideHost != "" {
+		baseURL = "http://" + overrideHost + ":10088"
 	}
 
-	// Generate config with JWT signing
-	configJSON := buildEditorConfig(filePath, r, cfg)
+	configJSON := buildEditorConfig(filePath, r, cfg, baseURL)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<title>FNos Office Editor</title>
-<style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
-</head><body><div id="editor"></div>
-<script src="%s/web-apps/apps/api/documents/api.js"></script>
-<script>new DocsAPI.DocEditor("editor",%s);</script>
-</body></html>`, docSvrURL, configJSON)
+	fmt.Fprintf(w, editorPageHTML, docSvrURL, configJSON)
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -240,10 +237,9 @@ func getUserName(r *http.Request) string {
 	return r.URL.Query().Get("user_name")
 }
 
-func buildEditorConfig(filePath string, r *http.Request, cfg *Config) string {
+func buildEditorConfig(filePath string, r *http.Request, cfg *Config, baseURL string) string {
 	info, _ := os.Stat(filePath)
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	baseURL := cfg.BaseURL
 	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
 	h := sha256.Sum256([]byte(keyData))
 	docKey := fmt.Sprintf("%x", h)[:20]
@@ -336,6 +332,15 @@ func signJWT(secret string, payload []byte) (string, error) {
 	sig := base64URLEncode(mac.Sum(nil))
 	return signing + "." + sig, nil
 }
+
+const editorPageHTML = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>FNos Office Editor</title>
+<style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
+</head><body><div id="editor"></div>
+<script src="%s/web-apps/apps/api/documents/api.js"></script>
+<script>new DocsAPI.DocEditor("editor",%s);</script>
+</body></html>`
 
 func base64URLEncode(data []byte) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
