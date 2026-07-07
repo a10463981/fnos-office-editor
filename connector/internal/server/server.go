@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -59,6 +60,9 @@ func NewServer(cfg *Config) http.Handler {
 	})
 	mux.HandleFunc("POST /api/create", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDocument(w, r, cfg)
+	})
+	mux.HandleFunc("POST /api/fonts/refresh", func(w http.ResponseWriter, r *http.Request) {
+		handleFontRefresh(w)
 	})
 
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
@@ -443,6 +447,18 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": filePath, "name": name})
+}
+
+func handleFontRefresh(w http.ResponseWriter) {
+	// Rebuild font cache in OnlyOffice container
+	cmd := exec.Command("docker", "exec", "officeeditor-docserver", "fc-cache", "-fv")
+	out, err := cmd.CombinedOutput()
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": err.Error(), "output": string(out)})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "output": string(out)})
 }
 
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {

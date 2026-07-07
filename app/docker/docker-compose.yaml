@@ -19,6 +19,8 @@ services:
       - officeeditor-ds-data:/var/www/onlyoffice/Data
       - officeeditor-ds-log:/var/log/onlyoffice
       - officeeditor-ds-fonts:/usr/share/fonts
+      # 自定义字体目录(FNos 文件管理器可管理)
+      - ${FONTS_DIR:-/vol1/1000/fonts}:/usr/share/fonts/custom:ro
     labels:
       - "app.officeeditor.managed=true"
 
