@@ -1,0 +1,193 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - install_callback
+# 安装应用文件后执行: 构建 Go 连接器, 启动 Docker, 配置 Nginx, 启动服务
+# ============================================================================
+set -e
+
+echo "[OfficeEditor] install_callback: 开始安装配置..."
+
+TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}"
+TRIM_PKGETC="${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}"
+TRIM_PKGVAR="${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}"
+TRIM_PKGNAME="${TRIM_PKGNAME:-OfficeEditor}"
+SERVICE_NAME="officeeditor-connector"
+
+# ============================================================
+# 1. 构建 Go 连接器
+# ============================================================
+echo "[OfficeEditor] 构建 Go 连接器..."
+cd "$TRIM_APPDEST/connector"
+
+# 检查 Go 环境，没有则安装
+if ! command -v go &>/dev/null; then
+    echo "正在安装 Go..."
+    wget -q https://go.dev/dl/go1.22.5.linux-${ARCH}.tar.gz -O /tmp/go.tar.gz
+    tar -C /usr/local -xzf /tmp/go.tar.gz
+    export PATH=$PATH:/usr/local/go/bin
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile.d/go.sh
+fi
+
+export PATH=$PATH:/usr/local/go/bin
+go build -o /usr/local/bin/officeeditor-connector ./cmd/server/
+echo "[OfficeEditor] Go 连接器已构建: /usr/local/bin/officeeditor-connector"
+
+# ============================================================
+# 2. 创建系统用户
+# ============================================================
+if ! id -u officeeditor &>/dev/null; then
+    useradd -r -s /sbin/nologin -d "$TRIM_PKGVAR" officeeditor
+fi
+
+# ============================================================
+# 3. 创建配置目录
+# ============================================================
+mkdir -p "$TRIM_PKGETC"
+mkdir -p "$TRIM_PKGVAR/log"
+mkdir -p "$TRIM_PKGVAR/data"
+
+# ============================================================
+# 4. 生成连接器配置
+# ============================================================
+cat > "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
+{
+  "port": 10099,
+  "doc_server_url": "http://127.0.0.1:9080",
+  "jwt_secret": "CONFIGEOF
+# 生成随机 JWT 密钥
+JWT_SECRET=$(openssl rand -hex 32)
+echo -n "$JWT_SECRET" >> "$TRIM_PKGETC/config.json"
+cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
+",
+  "log_dir": "CONFIGEOF
+echo -n "$TRIM_PKGVAR/log" >> "$TRIM_PKGETC/config.json"
+cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
+",
+  "data_dir": "CONFIGEOF
+echo -n "$TRIM_PKGVAR/data" >> "$TRIM_PKGETC/config.json"
+cat >> "$TRIM_PKGETC/config.json" << 'CONFIGEOF'
+",
+  "base_url": "http://localhost:10099",
+  "internal_networks": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+}
+CONFIGEOF
+
+echo "[OfficeEditor] 配置文件已生成: $TRIM_PKGETC/config.json"
+
+# ============================================================
+# 5. 配置 Nginx - 集成到 FNos 的 nginx
+# ============================================================
+echo "[OfficeEditor] 配置 Nginx..."
+
+# 检查 FNos nginx 配置目录
+NGINX_CONF_DIR="/etc/nginx/sites-enabled"
+if [ ! -d "$NGINX_CONF_DIR" ]; then
+    NGINX_CONF_DIR="/etc/nginx/conf.d"
+fi
+
+cat > "$NGINX_CONF_DIR/officeeditor.conf" << 'NGINXEOF'
+# OfficeEditor - OnlyOffice 连接器反向代理
+# 由安装脚本自动生成，请勿手动修改
+
+# 连接器 API 代理
+location /officeeditor/ {
+    proxy_pass http://127.0.0.1:10099/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Auth-Username $remote_user;
+    proxy_set_header X-Auth-UID $remote_user;
+    
+    # WebSocket 支持
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    
+    # 超时设置（大文件需要）
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_buffering off;
+}
+
+# OnlyOffice Document Server API 代理
+location /officeeditor-ds/ {
+    proxy_pass http://127.0.0.1:9080/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+}
+NGINXEOF
+
+# 重新加载 Nginx
+if systemctl is-active --quiet nginx; then
+    nginx -s reload || echo "警告: nginx 重载失败"
+fi
+
+echo "[OfficeEditor] Nginx 配置完成"
+
+# ============================================================
+# 6. 创建 systemd 服务
+# ============================================================
+echo "[OfficeEditor] 创建 systemd 服务..."
+
+cat > "/etc/systemd/system/$SERVICE_NAME.service" << 'SERVICEEOF'
+[Unit]
+Description=FNos OfficeEditor Connector - OnlyOffice Integration
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/officeeditor-connector \
+    --port 10099 \
+    --config /var/apps/OfficeEditor/etc/config.json
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+# 环境变量
+Environment=TRIM_PKGETC=/var/apps/OfficeEditor/etc
+Environment=TRIM_PKGVAR=/var/apps/OfficeEditor/var
+Environment=TRIM_APPDEST=/var/apps/OfficeEditor/target
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+systemctl daemon-reload
+echo "[OfficeEditor] Systemd 服务已创建"
+
+# ============================================================
+# 7. 启动 Docker 容器 (OnlyOffice Document Server)
+# ============================================================
+echo "[OfficeEditor] 启动 OnlyOffice Document Server..."
+cd "$TRIM_APPDEST/app/docker"
+
+if [ -f "docker-compose.yaml" ]; then
+    docker compose pull
+    docker compose up -d
+    echo "[OfficeEditor] OnlyOffice Document Server 已启动"
+else
+    echo "警告: docker-compose.yaml 不存在" > "$TRIM_TEMP_LOGFILE"
+fi
+
+# ============================================================
+# 8. 启动连接器服务
+# ============================================================
+systemctl enable "$SERVICE_NAME"
+systemctl start "$SERVICE_NAME"
+echo "[OfficeEditor] 连接器服务已启动"
+
+echo "[OfficeEditor] install_callback: 安装完成!"
+
+exit 0

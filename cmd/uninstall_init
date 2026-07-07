@@ -1,0 +1,17 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - uninstall_init
+# 卸载前执行: 停止服务, 备份用户数据
+# ============================================================================
+set -e
+
+echo "[OfficeEditor] uninstall_init: 准备卸载..."
+
+# 停止服务
+systemctl stop officeeditor-connector 2>/dev/null || true
+systemctl disable officeeditor-connector 2>/dev/null || true
+
+# 询问是否保留数据 (由 wizard/uninstall 控制)
+# 如果环境变量 PRESERVE_DATA=true，则跳过删除
+
+exit 0

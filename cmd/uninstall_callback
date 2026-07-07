@@ -1,0 +1,37 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - uninstall_callback
+# 卸载清理: 移除容器, 清理文件, 恢复 nginx
+# ============================================================================
+set -e
+
+echo "[OfficeEditor] uninstall_callback: 清理..."
+
+PRESERVE_DATA="${PRESERVE_DATA:-false}"
+
+# 停止并移除 Docker 容器
+cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/app/docker" 2>/dev/null || true
+docker compose down -v 2>/dev/null || true
+
+# 移除 systemd 服务
+rm -f "/etc/systemd/system/officeeditor-connector.service"
+systemctl daemon-reload
+
+# 移除二进制
+rm -f /usr/local/bin/officeeditor-connector
+
+# 移除 nginx 配置
+rm -f /etc/nginx/sites-enabled/officeeditor.conf 2>/dev/null
+rm -f /etc/nginx/conf.d/officeeditor.conf 2>/dev/null
+nginx -s reload 2>/dev/null || true
+
+# 如果不保留数据，清理数据目录
+if [ "$PRESERVE_DATA" != "true" ]; then
+    rm -rf "${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}" 2>/dev/null || true
+    echo "[OfficeEditor] 数据已清理"
+else
+    echo "[OfficeEditor] 用户数据已保留"
+fi
+
+echo "[OfficeEditor] 卸载完成"
+exit 0

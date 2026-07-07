@@ -1,0 +1,45 @@
+name: Build FPK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Connector
+        run: |
+          cd connector
+          go build -o ../dist/officeeditor-connector ./cmd/server/
+
+      - name: Download fnpack
+        run: |
+          wget -q https://github.com/tf4fun/fnpack/releases/latest/download/fnpack-linux-amd64 -O /tmp/fnpack
+          chmod +x /tmp/fnpack
+
+      - name: Build FPK
+        run: |
+          mkdir -p dist
+          /tmp/fnpack build --directory . --output dist/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OfficeEditor-fpk
+          path: dist/*.fpk
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.fpk

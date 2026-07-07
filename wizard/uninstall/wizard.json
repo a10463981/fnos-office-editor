@@ -1,0 +1,17 @@
+{
+  "page": [
+    {
+      "id": "preserve",
+      "title": "保留数据",
+      "desc": "是否保留用户数据？",
+      "fields": [
+        {
+          "id": "preserve_data",
+          "label": "保留配置和文档数据",
+          "type": "checkbox",
+          "default": true
+        }
+      ]
+    }
+  ]
+}

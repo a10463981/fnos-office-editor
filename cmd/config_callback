@@ -1,0 +1,19 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - config_callback
+# 配置变更后执行: 应用新配置并重启服务
+# ============================================================================
+set -e
+
+echo "[OfficeEditor] config_callback: 应用新配置..."
+
+# 重新生成配置文件（从 wizard 环境变量）
+if [ -n "$WIZARD_BASE_URL" ]; then
+    echo "[OfficeEditor] 更新 baseURL: $WIZARD_BASE_URL"
+fi
+
+# 重启连接器服务
+systemctl restart officeeditor-connector
+
+echo "[OfficeEditor] 新配置已生效"
+exit 0

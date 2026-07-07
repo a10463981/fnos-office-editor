@@ -1,0 +1,8 @@
+{
+  "docker-compose": [
+    {
+      "name": "onlyoffice-docserver",
+      "compose-path": "app/docker/docker-compose.yaml"
+    }
+  ]
+}

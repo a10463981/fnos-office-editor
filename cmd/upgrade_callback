@@ -1,0 +1,21 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - upgrade_callback
+# 升级后执行: 更新连接器二进制, 重启服务
+# ============================================================================
+set -e
+
+echo "[OfficeEditor] upgrade_callback: 应用升级..."
+
+cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/connector"
+go build -o /usr/local/bin/officeeditor-connector ./cmd/server/
+
+systemctl restart officeeditor-connector
+
+# 更新 Docker 镜像
+cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/app/docker"
+docker compose pull
+docker compose up -d
+
+echo "[OfficeEditor] 升级完成"
+exit 0

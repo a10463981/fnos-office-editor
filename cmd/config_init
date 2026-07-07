@@ -1,0 +1,15 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - config_init
+# 配置变更前执行: 备份当前配置
+# ============================================================================
+set -e
+
+echo "[OfficeEditor] config_init: 备份当前配置..."
+
+if [ -f "${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}/config.json" ]; then
+    cp "${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}/config.json" \
+       "${TRIM_PKGETC:-/var/apps/OfficeEditor/etc}/config.json.bak"
+fi
+
+exit 0

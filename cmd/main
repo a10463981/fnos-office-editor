@@ -1,0 +1,78 @@
+#!/bin/bash
+# ============================================================================
+# OfficeEditor - cmd/main
+# 应用运行控制: start / stop / status
+# ============================================================================
+set -e
+
+SERVICE_NAME="officeeditor-connector"
+COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/app/docker"
+
+case "$1" in
+    start)
+        echo "[OfficeEditor] 启动服务..."
+        
+        # 启动 OnlyOffice Document Server (Docker)
+        if [ -d "$COMPOSE_DIR" ]; then
+            cd "$COMPOSE_DIR"
+            docker compose start 2>/dev/null || docker compose up -d
+        fi
+        
+        # 启动连接器
+        systemctl start "$SERVICE_NAME"
+        
+        echo "[OfficeEditor] 服务已启动"
+        exit 0
+        ;;
+    
+    stop)
+        echo "[OfficeEditor] 停止服务..."
+        
+        # 停止连接器
+        systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+        
+        # 停止 OnlyOffice (保留容器)
+        if [ -d "$COMPOSE_DIR" ]; then
+            cd "$COMPOSE_DIR"
+            docker compose stop 2>/dev/null || true
+        fi
+        
+        echo "[OfficeEditor] 服务已停止"
+        exit 0
+        ;;
+    
+    status)
+        # 检查连接器
+        if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+            echo "连接器: 运行中"
+            CONNECTOR_OK=0
+        else
+            echo "连接器: 未运行"
+            CONNECTOR_OK=3
+        fi
+        
+        # 检查 OnlyOffice Docker
+        if [ -d "$COMPOSE_DIR" ]; then
+            cd "$COMPOSE_DIR"
+            if docker compose ps --status running 2>/dev/null | grep -q "Up"; then
+                echo "OnlyOffice: 运行中"
+            else
+                echo "OnlyOffice: 未运行"
+            fi
+        fi
+        
+        exit $CONNECTOR_OK
+        ;;
+    
+    reload)
+        echo "[OfficeEditor] 重载配置..."
+        systemctl restart "$SERVICE_NAME"
+        echo "[OfficeEditor] 配置已重载"
+        exit 0
+        ;;
+    
+    *)
+        echo "用法: $0 {start|stop|status|reload}"
+        exit 1
+        ;;
+esac
