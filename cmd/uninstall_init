@@ -1,17 +1,22 @@
 #!/bin/bash
 # ============================================================================
 # OfficeEditor - uninstall_init
-# 卸载前执行: 停止服务, 备份用户数据
+# 卸载前执行: 停止所有服务
 # ============================================================================
 set -e
 
-echo "[OfficeEditor] uninstall_init: 准备卸载..."
+echo "[OfficeEditor] uninstall_init: 停止服务..."
 
-# 停止服务
+# 停止连接器
 systemctl stop officeeditor-connector 2>/dev/null || true
 systemctl disable officeeditor-connector 2>/dev/null || true
 
-# 询问是否保留数据 (由 wizard/uninstall 控制)
-# 如果环境变量 PRESERVE_DATA=true，则跳过删除
+# 停止 OnlyOffice Docker 容器
+COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
+if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
+  cd "$COMPOSE_DIR"
+  docker compose stop 2>/dev/null || true
+  echo "[OfficeEditor] OnlyOffice 容器已停止"
+fi
 
 exit 0
