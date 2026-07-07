@@ -4,7 +4,7 @@
       "title": "FNos 办公编辑器",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
-      "url": "/",
+      "url": "/cgi/ThirdParty/OfficeEditor/index.cgi",
       "allUsers": true,
       "noDisplay": false,
       "fileTypes": [
