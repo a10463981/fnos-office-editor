@@ -1,33 +1,31 @@
-{
-  "page": [
-    {
-      "id": "volumes",
-      "title": "选择存储卷",
-      "fields": [
-        {
-          "id": "volumes",
-          "label": "存储卷路径",
-          "type": "multiselect",
-          "options": [
-            {"value": "/vol1", "label": "/vol1"},
-            {"value": "/vol2", "label": "/vol2"},
-            {"value": "/vol3", "label": "/vol3"}
-          ],
-          "required": true
-        }
-      ]
-    },
-    {
-      "id": "network",
-      "title": "网络配置",
-      "fields": [
-        {
-          "id": "base_url",
-          "label": "内网地址",
-          "type": "text",
-          "default": "http://192.168.1.100:10099"
-        }
-      ]
-    }
-  ]
-}
+[
+  {
+    "id": "volumes",
+    "title": "选择存储卷",
+    "fields": [
+      {
+        "id": "volumes",
+        "label": "存储卷路径",
+        "type": "multiselect",
+        "options": [
+          {"value": "/vol1", "label": "/vol1"},
+          {"value": "/vol2", "label": "/vol2"},
+          {"value": "/vol3", "label": "/vol3"}
+        ],
+        "required": true
+      }
+    ]
+  },
+  {
+    "id": "network",
+    "title": "网络配置",
+    "fields": [
+      {
+        "id": "base_url",
+        "label": "内网地址",
+        "type": "text",
+        "default": "http://192.168.1.100:10099"
+      }
+    ]
+  }
+]

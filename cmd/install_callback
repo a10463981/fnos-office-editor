@@ -15,7 +15,7 @@ SERVICE_NAME="officeeditor-connector"
 
 # ============================================================
 # 1. 构建 Go 连接器
-# ============================================================
+# 构建 Go 连接器
 echo "[OfficeEditor] 构建 Go 连接器..."
 cd "$TRIM_APPDEST/connector"
 
@@ -29,6 +29,8 @@ if ! command -v go &>/dev/null; then
 fi
 
 export PATH=$PATH:/usr/local/go/bin
+export GOCACHE=/tmp/gocache
+export GOPATH=/tmp/gopath
 go build -o /usr/local/bin/officeeditor-connector ./cmd/server/
 echo "[OfficeEditor] Go 连接器已构建: /usr/local/bin/officeeditor-connector"
 
