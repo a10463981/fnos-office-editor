@@ -608,6 +608,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
     <div class="history-list" id="history"></div>
   </div>
 </div>
+  <div class="section" style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px solid #eee">
+    <h2>赞助支持</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:12px">如果这个项目对你有帮助，欢迎扫码赞助！</p>
+    <div>
+      <img src="/cgi/ThirdParty/OfficeEditor/sponsor/wechat" style="width:160px;margin:0 8px" alt="wechat">
+      <img src="/cgi/ThirdParty/OfficeEditor/sponsor/alipay" style="width:160px;margin:0 8px" alt="alipay">
+    </div>
+    <p style="font-size:11px;color:#999;margin-top:12px">
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.00
+    </p>
+  </div>
+</div>
+
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <h3>⚙️ 字体设置</h3>
