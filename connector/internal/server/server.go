@@ -32,7 +32,6 @@ type Config struct {
 func NewServer(cfg *Config) http.Handler {
 	mux := http.NewServeMux()
 
-	// 健康检查
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -40,7 +39,6 @@ func NewServer(cfg *Config) http.Handler {
 		})
 	})
 
-	// 根路由 - 如果带 path 参数则跳转到编辑器
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -48,98 +46,57 @@ func NewServer(cfg *Config) http.Handler {
 		}
 		filePath := r.URL.Query().Get("path")
 		if filePath != "" {
-			// 直接渲染编辑器页面（不在 iframe 里走重定向）
 			handleEditorPage(w, r, cfg)
 			return
 		}
-		// 无文件参数，显示首页
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, `<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><title>FNos 办公编辑器</title>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>FNos 办公编辑器</title>
 <style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f5f7fa;color:#333}.c{text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.1)}h1{color:#1a73e8;font-size:28px}p{color:#666}</style>
-</head><body><div class="c"><h1>📄 FNos 办公编辑器</h1><p>基于 OnlyOffice 的在线文档编辑器</p><p style="color:#34a853">✅ 服务运行中</p><p>右键 Office 文件 → 选择 FNos 办公编辑器 即可编辑</p></div></body></html>`)
+</head><body><div class="c"><h1>FNos 办公编辑器</h1><p>基于 OnlyOffice 的在线文档编辑器</p><p style="color:#34a853">服务运行中</p><p>右键 Office 文件 → FNos 办公编辑器 即可编辑</p></div></body></html>`)
 	})
 
-	// API: 编辑器配置
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
 	})
-
-	// API: 文件下载 (OnlyOffice 调用)
 	mux.HandleFunc("GET /api/download", func(w http.ResponseWriter, r *http.Request) {
 		handleDownload(w, r)
 	})
-
-	// API: 保存回调 (OnlyOffice 调用)
 	mux.HandleFunc("POST /api/callback", func(w http.ResponseWriter, r *http.Request) {
 		handleCallback(w, r)
 	})
-
-	// 编辑器页面
 	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
 	})
-
 	return mux
 }
 
-// handleEditorConfig 生成 OnlyOffice 编辑器配置
 func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		http.Error(w, `{"error":"missing path"}`, http.StatusBadRequest)
 		return
 	}
-
-	// 用户认证：优先从 FNos Header 读取
-	userID := r.Header.Get("X-Auth-UID")
-	userName := r.Header.Get("X-Auth-Username")
-	if userID == "" {
-		userID = r.URL.Query().Get("user_id")
-	}
-	if userName == "" {
-		userName = r.URL.Query().Get("user_name")
-	}
-	if userID == "" {
-		userID = "anonymous"
-		userName = "匿名用户"
-	}
-
-	// 判断内/外网
-	host := r.Host
-	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
-		host = h
-	}
-	isInternal := isInternalHost(host, cfg.InternalNetworks)
-
-	// 文件信息
 	info, err := os.Stat(filePath)
 	if err != nil {
 		http.Error(w, `{"error":"file not found"}`, http.StatusNotFound)
 		return
 	}
-
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	docType := documentType(ext)
+	baseURL := getEffectiveBaseURL(r, cfg)
+
 	mode := r.URL.Query().Get("mode")
 	canEdit := editable(ext) && mode != "view"
+	userID := getUserID(r)
+	userName := getUserName(r)
 
-	// 生成文档 key
 	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
 	h := sha256.Sum256([]byte(keyData))
 	docKey := fmt.Sprintf("%x", h)[:20]
 
-	// URL
-	baseURL := cfg.BaseURL
-	if !isInternal && cfg.PublicBaseURL != "" {
-		baseURL = cfg.PublicBaseURL
-	}
-
 	downloadURL := fmt.Sprintf("%s/api/download?path=%s", baseURL, url.QueryEscape(filePath))
 	callbackURL := fmt.Sprintf("%s/api/callback?path=%s", baseURL, url.QueryEscape(filePath))
 
-	// 构建配置
 	config := map[string]interface{}{
 		"document": map[string]interface{}{
 			"fileType": ext,
@@ -150,7 +107,7 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 				"edit": canEdit, "download": true, "print": true,
 			},
 		},
-		"documentType": docType,
+		"documentType": documentType(ext),
 		"editorConfig": map[string]interface{}{
 			"callbackUrl": callbackURL,
 			"lang":        "zh",
@@ -160,21 +117,44 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 			},
 		},
 	}
-
-	// JWT 签名
 	if cfg.JWTSecret != "" {
-		configJSON, _ := json.Marshal(config)
-		token, err := signJWT(cfg.JWTSecret, configJSON)
-		if err == nil {
-			config["token"] = token
+		if b, err := json.Marshal(config); err == nil {
+			if tok, err := signJWT(cfg.JWTSecret, b); err == nil {
+				config["token"] = tok
+			}
 		}
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(config)
 }
 
-// handleDownload 文件下载（OnlyOffice 调用）
+func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
+	filePath := r.URL.Query().Get("path")
+	if filePath == "" {
+		http.Error(w, "missing path", http.StatusBadRequest)
+		return
+	}
+
+	// DocServer URL - use host override if provided by CGI proxy
+	docSvrURL := cfg.DocServerURL
+	if h := getHostOverride(r); h != "" {
+		docSvrURL = "http://" + h + ":9080"
+	}
+
+	// Generate config with JWT signing
+	configJSON := buildEditorConfig(filePath, r, cfg)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>FNos Office Editor</title>
+<style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
+</head><body><div id="editor"></div>
+<script src="%s/web-apps/apps/api/documents/api.js"></script>
+<script>new DocsAPI.DocEditor("editor",%s);</script>
+</body></html>`, docSvrURL, configJSON)
+}
+
 func handleDownload(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
@@ -184,14 +164,12 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filePath)
 }
 
-// handleCallback 保存回调（OnlyOffice 调用）
 func handleCallback(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		json.NewEncoder(w).Encode(map[string]int{"error": 1})
 		return
 	}
-
 	var cb struct {
 		Status int    `json:"status"`
 		URL    string `json:"url"`
@@ -200,8 +178,6 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]int{"error": 1})
 		return
 	}
-
-	// 状态 2/6 = 需要保存
 	if cb.Status == 2 || cb.Status == 6 {
 		if cb.URL == "" {
 			json.NewEncoder(w).Encode(map[string]int{"error": 1})
@@ -209,67 +185,118 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		resp, err := http.Get(cb.URL)
 		if err != nil {
-			log.Printf("下载编辑后文件失败: %v", err)
+			log.Printf("download edited file failed: %v", err)
 			json.NewEncoder(w).Encode(map[string]int{"error": 1})
 			return
 		}
 		defer resp.Body.Close()
-
 		out, err := os.Create(filePath)
 		if err != nil {
-			log.Printf("写入文件失败: %v", err)
 			json.NewEncoder(w).Encode(map[string]int{"error": 1})
 			return
 		}
 		defer out.Close()
-
-		if _, err := io.Copy(out, resp.Body); err != nil {
-			log.Printf("保存文件失败: %v", err)
-			json.NewEncoder(w).Encode(map[string]int{"error": 1})
-			return
-		}
-		log.Printf("文件已保存: %s", filePath)
+		io.Copy(out, resp.Body)
+		log.Printf("file saved: %s", filePath)
 	}
-
 	json.NewEncoder(w).Encode(map[string]int{"error": 0})
 }
 
-// handleEditorPage 渲染编辑器页面
-func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
-	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		http.Error(w, "missing path", http.StatusBadRequest)
-		return
-	}
+// ========== helpers ==========
 
+func getEffectiveBaseURL(r *http.Request, cfg *Config) string {
 	host := r.Host
 	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
 		host = h
 	}
-	isInternal := isInternalHost(host, cfg.InternalNetworks)
-
-	docSvrURL := cfg.DocServerURL
-	if !isInternal && cfg.DocServerPubURL != "" {
-		docSvrURL = cfg.DocServerPubURL
+	// Server-side calls always use localhost
+	if host == "localhost" || host == "127.0.0.1" || strings.HasPrefix(host, "::1") {
+		return cfg.BaseURL
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<title>FNos Office Editor</title>
-<style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
-</head><body><div id="editor"></div>
-<script src="%s/web-apps/apps/api/documents/api.js"></script>
-<script>
-var cfg=%s;
-new DocsAPI.DocEditor("editor",cfg);
-</script></body></html>`,
-		docSvrURL,
-		editorConfigJSON(filePath, cfg),
-	)
+	return cfg.BaseURL
 }
 
-// ========== 辅助函数 ==========
+func getHostOverride(r *http.Request) string {
+	if h := r.URL.Query().Get("host"); h != "" {
+		return h
+	}
+	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
+		return strings.Split(h, ":")[0]
+	}
+	return ""
+}
+
+func getUserID(r *http.Request) string {
+	if uid := r.Header.Get("X-Auth-UID"); uid != "" {
+		return uid
+	}
+	return r.URL.Query().Get("user_id")
+}
+
+func getUserName(r *http.Request) string {
+	if n := r.Header.Get("X-Auth-Username"); n != "" {
+		return n
+	}
+	return r.URL.Query().Get("user_name")
+}
+
+func buildEditorConfig(filePath string, r *http.Request, cfg *Config) string {
+	info, _ := os.Stat(filePath)
+	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
+	baseURL := cfg.BaseURL
+	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
+	h := sha256.Sum256([]byte(keyData))
+	docKey := fmt.Sprintf("%x", h)[:20]
+
+	userID := getUserID(r)
+	if userID == "" {
+		userID = "fnos_user"
+	}
+	userName := getUserName(r)
+	if userName == "" {
+		userName = "FNos 用户"
+	}
+
+	config := map[string]interface{}{
+		"document": map[string]interface{}{
+			"fileType": ext,
+			"key":      docKey,
+			"title":    info.Name(),
+			"url":      fmt.Sprintf("%s/api/download?path=%s", baseURL, url.QueryEscape(filePath)),
+			"permissions": map[string]interface{}{
+				"edit": editable(ext), "download": true, "print": true,
+			},
+		},
+		"documentType": documentType(ext),
+		"editorConfig": map[string]interface{}{
+			"callbackUrl": fmt.Sprintf("%s/api/callback?path=%s", baseURL, url.QueryEscape(filePath)),
+			"mode":        "edit",
+			"lang":        "zh",
+			"user": map[string]interface{}{
+				"id": userID, "name": userName,
+			},
+		},
+	}
+	// JWT signing
+	if cfg.JWTSecret != "" {
+		if b, err := json.Marshal(config); err == nil {
+			if tok, err := signJWT(cfg.JWTSecret, b); err == nil {
+				configJSON, _ := json.Marshal(config)
+				tok = tok // Already computed
+				_ = tok
+			}
+		}
+		// Re-marshal with token
+		if b, err := json.Marshal(config); err == nil {
+			if tok, err := signJWT(cfg.JWTSecret, b); err == nil {
+				// Add token to config
+				config["token"] = tok
+			}
+		}
+	}
+	b, _ := json.Marshal(config)
+	return string(b)
+}
 
 func documentType(ext string) string {
 	switch ext {
@@ -309,34 +336,6 @@ func isInternalHost(host string, internalNetworks []string) bool {
 	return false
 }
 
-func editorConfigJSON(filePath string, cfg *Config) string {
-	info, _ := os.Stat(filePath)
-	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
-	h := sha256.Sum256([]byte(keyData))
-	docKey := fmt.Sprintf("%x", h)[:20]
-
-	config := map[string]interface{}{
-		"document": map[string]interface{}{
-			"fileType": ext,
-			"key":      docKey,
-			"title":    info.Name(),
-			"url":      fmt.Sprintf("%s/api/download?path=%s", cfg.BaseURL, url.QueryEscape(filePath)),
-			"permissions": map[string]interface{}{
-				"edit": editable(ext), "download": true, "print": true,
-			},
-		},
-		"documentType": documentType(ext),
-		"editorConfig": map[string]interface{}{
-			"mode": "edit", "lang": "zh",
-			"user": map[string]interface{}{"id": "fnos_user", "name": "FNos 用户"},
-		},
-	}
-	b, _ := json.Marshal(config)
-	return string(b)
-}
-
-// JWT 签名（HS256）
 func signJWT(secret string, payload []byte) (string, error) {
 	header := base64URLEncode([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	body := base64URLEncode(payload)
