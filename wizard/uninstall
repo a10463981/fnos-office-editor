@@ -1,7 +1,8 @@
 [
   {
-    "id": "preserve",
+    "stepTitle": "保留数据",
     "title": "保留数据",
+    "desc": "是否保留配置和文档数据？",
     "fields": [
       {
         "id": "preserve_data",

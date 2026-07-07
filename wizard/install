@@ -1,12 +1,14 @@
 [
   {
-    "id": "volumes",
+    "stepTitle": "选择存储卷",
     "title": "选择存储卷",
+    "desc": "选择需要 OnlyOffice 访问的存储卷路径",
     "fields": [
       {
         "id": "volumes",
         "label": "存储卷路径",
         "type": "multiselect",
+        "description": "选择 OnlyOffice 可以访问的存储卷",
         "options": [
           {"value": "/vol1", "label": "/vol1"},
           {"value": "/vol2", "label": "/vol2"},
@@ -17,14 +19,22 @@
     ]
   },
   {
-    "id": "network",
+    "stepTitle": "网络配置",
     "title": "网络配置",
+    "desc": "配置连接器的内外网访问地址",
     "fields": [
       {
         "id": "base_url",
         "label": "内网地址",
         "type": "text",
-        "default": "http://192.168.1.100:10099"
+        "default": "http://192.168.1.100:10099",
+        "description": "内网访问连接器的地址"
+      },
+      {
+        "id": "public_url",
+        "label": "外网地址（可选）",
+        "type": "text",
+        "description": "远程访问的完整 URL，如 https://xxx.fnconnect.com"
       }
     ]
   }
