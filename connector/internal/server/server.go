@@ -624,7 +624,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.00
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> · <span id="currentVersion" style="color:#2ecc71">v1.0.02</span><span id="updateHint" style="display:none"></span>
     </p>
   </div>
 </div>
@@ -691,7 +691,6 @@ function saveSettings(){
     .catch(e=>{toast("保存失败: "+e.message);})
     .finally(function(){btn.disabled=false;btn.textContent="保存并生效";});
 }
-
 
 document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
 document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
