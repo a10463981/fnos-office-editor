@@ -645,9 +645,11 @@ function closeSettings(){
 }
 function saveSettings(){
   var dir=document.getElementById("fontsDirInput").value.trim();
+  if(!dir){toast("请输入字体目录路径");return;}
   fetch(apiBase+"/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
-    .then(r=>r.json()).then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败");closeSettings();})
-    .catch(e=>{toast("保存失败")});
+    .then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})
+    .then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败: "+d.error);closeSettings();})
+    .catch(e=>{toast("保存失败: "+e.message);console.error("saveSettings error:",e)});
 }
 loadHistory();
 </script>
