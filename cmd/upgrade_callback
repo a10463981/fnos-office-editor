@@ -7,8 +7,8 @@ set -e
 
 echo "[OfficeEditor] upgrade_callback: 应用升级..."
 
-cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/connector"
-go build -o /usr/local/bin/officeeditor-connector ./cmd/server/
+cp "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
+chmod +x /usr/local/bin/officeeditor-connector
 
 systemctl restart officeeditor-connector
 
