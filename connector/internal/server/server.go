@@ -438,8 +438,16 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 }
 
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
+	dir := r.URL.Query().Get("dir")
+	if dir == "" { dir = "/vol1/1000" }
+	userName := r.URL.Query().Get("user_name")
+	if userName == "" { userName = "FNos 用户" }
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, homePageHTML)
+	// Inject user context into homepage HTML
+	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
+	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
+	fmt.Fprint(w, html)
 }
 
 const homePageHTML = `<!DOCTYPE html>
@@ -474,7 +482,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style></head><body>
-<div class="header"><h1>📄 FNos 办公编辑器</h1><p>基于 OnlyOffice — 在线编辑 Word / Excel / PPT</p></div>
+<div class="header"><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div>
 <div class="content">
   <div class="section">
     <h2>新建文档</h2>
@@ -491,12 +499,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 <div class="toast" id="toast"></div>
 <script>
+var userDir="USER_DIR_PLACEHOLDER";
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 function createDoc(type){
   var btn=event.target;
   btn.disabled=true;
   btn.innerHTML=btn.innerHTML.replace(/<span>.*<\/span>/,'<span class="spinner"></span>');
-  fetch("/api/create?type="+type,{method:"POST"})
+  fetch("/api/create?type="+type+"&dir="+encodeURIComponent(userDir),{method:"POST"})
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
