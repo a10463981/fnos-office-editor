@@ -4,7 +4,7 @@
       "title": "FNos 办公编辑器",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
-      "url": "/cgi/ThirdParty/OfficeEditor/index.cgi/",
+      "url": "/",
       "allUsers": true
     }
   },
@@ -12,7 +12,7 @@
     "OfficeEditor.OpenDocument": {
       "title": "用 OnlyOffice 编辑",
       "type": "url",
-      "url": "http://localhost:10088/editor?path={path}",
+      "url": "/editor?path={path}",
       "fileTypes": ["docx", "xlsx", "pptx"],
       "allUsers": true,
       "noDisplay": true
@@ -20,7 +20,7 @@
     "OfficeEditor.OpenLegacyDocument": {
       "title": "用 OnlyOffice 打开",
       "type": "url",
-      "url": "http://localhost:10088/editor?path={path}",
+      "url": "/editor?path={path}",
       "fileTypes": ["doc", "xls", "ppt"],
       "allUsers": true,
       "noDisplay": true
@@ -28,7 +28,7 @@
     "OfficeEditor.OpenODF": {
       "title": "用 OnlyOffice 打开",
       "type": "url",
-      "url": "http://localhost:10088/editor?path={path}",
+      "url": "/editor?path={path}",
       "fileTypes": ["odt", "ods", "odp"],
       "allUsers": true,
       "noDisplay": true
@@ -36,7 +36,7 @@
     "OfficeEditor.ViewDocument": {
       "title": "用 OnlyOffice 预览",
       "type": "url",
-      "url": "http://localhost:10088/editor?path={path}&mode=view",
+      "url": "/editor?path={path}&mode=view",
       "fileTypes": ["pdf", "txt", "csv", "rtf", "epub"],
       "allUsers": true,
       "noDisplay": true
