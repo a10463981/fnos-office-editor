@@ -9,9 +9,6 @@
 connector/officeeditor-connector
 connector/vendor/
 
-# FPK
-*.fpk
-
 # Build output
 dist/
 build/
