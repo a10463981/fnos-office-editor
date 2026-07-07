@@ -16,7 +16,7 @@ if [ "$REMOVE_DOCKER" = "true" ]; then
   echo "[OfficeEditor] 清理 Docker..."
   
   # 先尝试 compose down（如果有 compose 文件）
-  COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
+  COMPOSE_DIR="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/officeeditor-docker"
   if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
     cd "$COMPOSE_DIR" 2>/dev/null
     docker compose down -v --remove-orphans 2>/dev/null || true
