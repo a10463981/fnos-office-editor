@@ -101,7 +101,8 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
 	docType := documentType(ext)
-	canEdit := editable(ext)
+	mode := r.URL.Query().Get("mode")
+	canEdit := editable(ext) && mode != "view"
 
 	// 生成文档 key
 	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
