@@ -442,11 +442,13 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	if dir == "" { dir = "/vol1/1000" }
 	userName := r.URL.Query().Get("user_name")
 	if userName == "" { userName = "FNos 用户" }
+	apiBase := r.URL.Query().Get("api_base")
+	if apiBase == "" { apiBase = "http://localhost:10088" }
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// Inject user context into homepage HTML
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
 	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
+	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
 	fmt.Fprint(w, html)
 }
 
@@ -500,12 +502,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 <script>
 var userDir="USER_DIR_PLACEHOLDER";
+var apiBase="API_BASE_PLACEHOLDER";
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 function createDoc(type){
   var btn=event.target;
   btn.disabled=true;
   btn.innerHTML=btn.innerHTML.replace(/<span>.*<\/span>/,'<span class="spinner"></span>');
-  fetch("/api/create?type="+type+"&dir="+encodeURIComponent(userDir),{method:"POST"})
+  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir),{method:"POST"})
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
@@ -514,7 +517,7 @@ function createDoc(type){
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
 function loadHistory(){
-  fetch("/api/history")
+  fetch(apiBase+"/api/history")
     .then(r=>r.json())
     .then(items=>{
       var h=document.getElementById("history");
