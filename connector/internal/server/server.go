@@ -721,7 +721,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.00"
+const AppVersion = "1.0.01"
 
 func handleVersion(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")

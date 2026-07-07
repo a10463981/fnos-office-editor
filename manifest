@@ -1,5 +1,5 @@
 appname="OfficeEditor"
-version="1.0.00"
+version="1.0.01"
 display_name="office 协作"
 desc="office 协作 — 基于 OnlyOffice 的 FNos 在线文档编辑器。支持 Word/Excel/PPT 在线编辑、多人协作、用户身份识别、自定义字体。双击或右键 Office 文件即可编辑。GitHub: github.com/a10463981/fnos-office-editor"
 maintainer="OnlyOffice"
