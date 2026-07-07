@@ -43,6 +43,7 @@ if file_path:
         print(html)
     sys.exit(0)
 
-result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}'], capture_output=True, text=True, timeout=10)
+is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
+result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&is_admin={is_admin}'], capture_output=True, text=True, timeout=10)
 print('Content-Type: text/html; charset=utf-8\n')
 print(result.stdout)

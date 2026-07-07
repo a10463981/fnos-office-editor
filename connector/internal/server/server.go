@@ -528,11 +528,17 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	if userName == "" { userName = "FNos 用户" }
 	apiBase := r.URL.Query().Get("api_base")
 	if apiBase == "" { apiBase = "http://localhost:10088" }
+	isAdmin := r.URL.Query().Get("is_admin")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
 	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
 	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
+	if isAdmin == "true" {
+		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "", 1)
+	} else {
+		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "HIDDEN_BY_ADMIN_CHECK", 1)
+	}
 	fmt.Fprint(w, html)
 }
 
@@ -568,6 +574,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .settings-btn{cursor:pointer;font-size:24px;opacity:.8;transition:opacity .2s}.settings-btn:hover{opacity:1}
+.settings-btn.HIDDEN_BY_ADMIN_CHECK{display:none!important}
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;justify-content:center;align-items:center}
 .modal-overlay.show{display:flex}
 .modal{background:#fff;border-radius:12px;padding:28px;width:90%;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
@@ -578,7 +585,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .modal .btn-save{background:#1a73e8;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 .modal .btn-cancel{background:#f0f0f0;color:#333;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 </style></head><body>
-<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
+<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn IS_ADMIN_PLACEHOLDER" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
 <div class="content">
   <div class="section">
     <h2>新建文档</h2>
