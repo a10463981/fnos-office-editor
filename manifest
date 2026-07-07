@@ -10,4 +10,4 @@ min_version="0.8.28"
 change_log="首个版本：支持 DOCX/XLSX/PPTX 在线编辑，FNos 用户认证集成，内外网自适应访问，原生 Go 连接器服务。"
 port=10099
 ctl_stop=true
-desktop_uidir=www
+desktop_uidir=ui
