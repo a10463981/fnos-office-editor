@@ -25,12 +25,17 @@ gpasswd -a admin docker 2>/dev/null || usermod -aG docker admin 2>/dev/null || t
 # 4. 启动 OnlyOffice
 echo "[OfficeEditor] 启动 OnlyOffice Document Server (端口 9080)..."
 COMPOSE_DIR="$TRIM_APPDEST/officeeditor-docker"
+echo "[OfficeEditor] COMPOSE_DIR=$COMPOSE_DIR"
+ls -la "$COMPOSE_DIR/" 2>/dev/null || echo "[OfficeEditor] 目录不存在!"
 if [ -f "$COMPOSE_DIR/docker-compose.yaml" ]; then
   cd "$COMPOSE_DIR"
-  docker compose pull -q 2>/dev/null || docker compose pull 2>&1 | tail -3
-  docker compose up -d --force-recreate 2>&1
+  echo "[OfficeEditor] 拉取 OnlyOffice 镜像..."
+  docker compose pull -q 2>/dev/null || docker compose pull 2>&1 | tail -3 || true
+  echo "[OfficeEditor] 启动容器..."
+  docker compose up -d --force-recreate 2>&1 || echo "[OfficeEditor] Docker 启动失败，请手动检查"
 else
-  echo "[OfficeEditor] 警告: docker-compose.yaml 不存在"
+  echo "[OfficeEditor] 警告: docker-compose.yaml 不存在于 $COMPOSE_DIR"
+  find /var/apps/OfficeEditor -name "docker-compose.yaml" 2>/dev/null
 fi
 
 # 5. 配置 FNos nginx 代理 OnlyOffice（加速加载）
