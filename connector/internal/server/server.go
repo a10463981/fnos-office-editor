@@ -727,7 +727,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	// Serve sponsor QR images from app/ui/images/
 	basePath := "/var/apps/OfficeEditor/target/ui/images"
 	if r.URL.Path == "/sponsor/wechat" {
-		http.ServeFile(w, r, basePath+"/donate-wechat.jpg")
+		http.ServeFile(w, r, basePath+"/donate-wechat.png")
 	} else {
 		http.ServeFile(w, r, basePath+"/donate-alipay.png")
 	}

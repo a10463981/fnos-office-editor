@@ -174,7 +174,7 @@ fnpack build --directory .
 你的赞助是我更新的动力 💪
 
 
-  <img src="docs/donate-wechat.jpg" alt="微信赞助">
+  <img src="docs/donate-wechat.png" alt="微信赞助">
   
   <img src="docs/donate-alipay.png" alt="支付宝赞助">
 
