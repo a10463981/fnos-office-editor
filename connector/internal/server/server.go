@@ -89,6 +89,9 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
 	})
+	mux.HandleFunc("GET /officeds/", func(w http.ResponseWriter, r *http.Request) {
+		handleOfficedsProxy(w, r)
+	})
 	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
@@ -367,7 +370,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="" id="onlyoffice-js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -656,6 +659,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 <script>
 var userDir="USER_DIR_PLACEHOLDER";
+document.getElementById("onlyoffice-js").src=apiBase+"/officeds/web-apps/apps/api/documents/api.js";
 var userId="USER_ID_PLACEHOLDER";
 var apiBase="API_BASE_PLACEHOLDER";
     html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
@@ -730,6 +734,18 @@ func isSafePath(p string) bool {
 	if p == "" { return false }
 	if strings.Contains(p, "..") { return false }
 	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
+}
+
+func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
+	backend := "http://127.0.0.1:9080" + r.URL.Path[len("/officeds"):]
+	if r.URL.RawQuery != "" { backend += "?" + r.URL.RawQuery }
+	resp, err := http.Get(backend)
+	if err != nil { http.Error(w, "proxy error", 502); return }
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func base64URLEncode(data []byte) string {
