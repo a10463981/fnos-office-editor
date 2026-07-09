@@ -367,7 +367,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="/officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -636,7 +636,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> · <span id="currentVersion" style="color:#2ecc71">v1.0.03</span><span id="updateHint" style="display:none"></span>
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> · <span id="currentVersion" style="color:#2ecc71">v1.0.02</span><span id="updateHint" style="display:none"></span>
     </p>
   </div>
 </div>
@@ -746,7 +746,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.03"
+const AppVersion = "1.0.02"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release
