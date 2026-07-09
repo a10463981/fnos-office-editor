@@ -636,7 +636,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> · <span id="currentVersion" style="color:#2ecc71">v1.0.02</span><span id="updateHint" style="display:none"></span>
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> · <span id="currentVersion" style="color:#2ecc71">v1.0.03</span><span id="updateHint" style="display:none"></span>
     </p>
   </div>
 </div>
@@ -746,7 +746,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.02"
+const AppVersion = "1.0.03"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release
