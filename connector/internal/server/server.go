@@ -92,7 +92,10 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
-	mux.HandleFunc("/officeds/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /officeds/", func(w http.ResponseWriter, r *http.Request) {
+		handleOfficedsProxy(w, r)
+	})
+	mux.HandleFunc("POST /officeds/", func(w http.ResponseWriter, r *http.Request) {
 		handleOfficedsProxy(w, r)
 	})
 	return corsHandler(mux)
