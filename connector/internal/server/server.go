@@ -370,7 +370,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="" id="onlyoffice-js"></script>
+<script src="officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -659,7 +659,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 <script>
 var userDir="USER_DIR_PLACEHOLDER";
-document.getElementById("onlyoffice-js").src=apiBase+"/officeds/web-apps/apps/api/documents/api.js";
 var userId="USER_ID_PLACEHOLDER";
 var apiBase="API_BASE_PLACEHOLDER";
     html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
