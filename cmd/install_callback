@@ -38,8 +38,9 @@ else
   find /var/apps/OfficeEditor -name "docker-compose.yaml" 2>/dev/null
 fi
 
-# 5. 配置 FNos nginx 代理 OnlyOffice（加速加载）
+# 5. 配置 FNos nginx 代理（支持 fnconnect/公网/内网 全场景）
 echo "[OfficeEditor] 配置 nginx 代理..."
+# 5a. OnlyOffice Document Server 代理（端口 9080 -> /officeds/）
 cat > "/usr/trim/nginx/conf/conf.d/officeeditor-officeds.conf" << 'NGXEOF'
 location ^~ /officeds/ {
    proxy_pass http://127.0.0.1:9080/;
@@ -51,11 +52,38 @@ location ^~ /officeds/ {
    proxy_set_header Connection $connection_upgrade;
 }
 NGXEOF
+
+# 5b. 连接器 API 代理（端口 10088 -> /officeeditor-api/）
+#     所有场景通过 nginx 统一入口，浏览器不用直接连 10088 端口
+cat > "/usr/trim/nginx/conf/conf.d/officeeditor-api.conf" << 'NGXEOF'
+location ^~ /officeeditor-api/ {
+   proxy_pass http://127.0.0.1:10088/;
+   proxy_set_header Host $host;
+   proxy_set_header X-Real-IP $remote_addr;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_http_version 1.1;
+   proxy_read_timeout 120s;
+}
+NGXEOF
+
 /usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || true
-echo "[OfficeEditor] nginx 代理已配置: /officeds/ → 127.0.0.1:9080"
+echo "[OfficeEditor] nginx 代理已配置:"
+echo "  /officeds/     ---> 127.0.0.1:9080 (OnlyOffice)"
+echo "  /officeeditor-api/ --> 127.0.0.1:10088 (连接器 API)"
 
 # 6. 创建 systemd 服务
 echo "[OfficeEditor] 创建 systemd 服务..."
+
+# 尝试获取 NAS 的 LAN IP 作为默认 BASE_URL
+NAS_LAN_IP=""
+if command -v ip &>/dev/null; then
+  NAS_LAN_IP=$(ip -4 route get 1 2>/dev/null | head -1 | awk '{print $7}')
+fi
+if [ -z "$NAS_LAN_IP" ]; then
+  NAS_LAN_IP="localhost"
+fi
+
 cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
 Description=FNos OfficeEditor Connector
@@ -67,17 +95,44 @@ Type=simple
 ExecStart=/usr/local/bin/officeeditor-connector --port 10088
 Restart=always
 RestartSec=10
+EnvironmentFile=-/etc/default/officeeditor-connector
 Environment=JWT_SECRET=$JWT_SECRET
-Environment=BASE_URL=http://localhost:10088
+Environment=BASE_URL=http://${NAS_LAN_IP}:10088
+Environment=PUBLIC_BASE_URL=
 Environment=TRIM_PKGVAR=${TRIM_PKGVAR:-/var/apps/OfficeEditor/var}
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+echo "[OfficeEditor] BASE_URL 已设为 http://${NAS_LAN_IP}:10088"
+echo "[OfficeEditor] PUBLIC_BASE_URL 未设置（设为空，自动检测模式）"
+echo "[OfficeEditor] 若使用 fnconnect 或公网访问，可在 /etc/default/officeeditor-connector 中设置 PUBLIC_BASE_URL"
+
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" 2>/dev/null || true
 systemctl start "$SERVICE_NAME" 2>/dev/null || true
+
+# 7. 创建环境变量配置文件模板（便于用户自定义 PUBLIC_BASE_URL）
+cat > "/etc/default/officeeditor-connector" << 'ENVEOF'
+# OfficeEditor Connector 环境变量配置
+# 此文件在 systemd 服务中通过 EnvironmentFile 加载，优先级高于单元文件
+#
+# 使用场景:
+# 1. fnconnect 远程访问: 设置 PUBLIC_BASE_URL 为您的 Trim 域名
+#    例如: PUBLIC_BASE_URL=https://xxxx.trim.com
+# 2. DDNS/公网访问: 设置 PUBLIC_BASE_URL 为您的 DDNS 域名
+#    例如: PUBLIC_BASE_URL=http://your-nas.abc.com:10088
+# 3. NAT 穿透 (frp/ZeroTier): 设置 PUBLIC_BASE_URL 为穿透后的地址
+#    例如: PUBLIC_BASE_URL=http://10.0.0.1:10088
+#
+# 留空或不设置 = 自动检测模式（基于请求的 Host header）
+# PUBLIC_BASE_URL=
+
+# JWT_SECRET 在安装时自动生成，如需覆盖可在此设置
+# JWT_SECRET=your-custom-secret-here
+ENVEOF
+echo "[OfficeEditor] 环境变量配置文件已创建: /etc/default/officeeditor-connector"
 
 echo "[OfficeEditor] 安装完成!"
 echo "  连接器: http://localhost:10088/health"

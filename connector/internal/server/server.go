@@ -114,7 +114,9 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	baseURL := getEffectiveBaseURL(r, cfg)
+	// 始终使用 cfg.BaseURL（NAS 内网 IP）作为 download/callback URL
+	// 因为 OnlyOffice Document Server (Docker 9080) 从服务器端调用这些地址
+	baseURL := cfg.BaseURL
 
 	mode := r.URL.Query().Get("mode")
 	canEdit := editable(ext) && mode != "view"
@@ -166,18 +168,17 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// Get effective host for URLs (from CGI proxy)
-	overrideHost := getHostOverride(r)
-	baseURL := cfg.BaseURL
-	if overrideHost != "" {
-		baseURL = "http://" + overrideHost + ":10088"
-	}
+	// baseURL: OnlyOffice Document Server (Docker 内) 回调使用的地址
+	// 必须使用主机可达的地址，而不是浏览器侧的地址。
+	// 因此始终使用 cfg.BaseURL（配为 NAS 内网 IP），不由 overrideHost 覆盖。
+	configJSON := buildEditorConfig(filePath, r, cfg, cfg.BaseURL)
 
-	configJSON := buildEditorConfig(filePath, r, cfg, baseURL)
-
+	// OnlyOffice API JS 使用绝对路径（通过 nginx 或连接器自身的 /officeds/ 代理）
+	// 浏览器从同源加载，适用于 fnconnect/公网/内网 所有场景
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
-	fmt.Fprintf(w, editorPageHTML, configJSON)
+	html := strings.Replace(editorPageHTML, "__API_JS_BASE__", "", 1)
+	fmt.Fprintf(w, html, configJSON)
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -230,14 +231,28 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 // ========== helpers ==========
 
 func getEffectiveBaseURL(r *http.Request, cfg *Config) string {
+	// 优先级 1: 显式配置的公网地址（用户通过 DDNS / NAT 穿透访问时）
+	if cfg.PublicBaseURL != "" {
+		// 只有当请求来自外网时才使用公网地址
+		if !isInternalHost(r.Host, cfg.InternalNetworks) {
+			return cfg.PublicBaseURL
+		}
+	}
+
+	// 优先级 2: 请求中携带的 Host header（fnconnect / 反向代理场景）
 	host := r.Host
 	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
 		host = h
 	}
-	// Server-side calls always use localhost
-	if host == "localhost" || host == "127.0.0.1" || strings.HasPrefix(host, "::1") {
-		return cfg.BaseURL
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
 	}
+	// 如果请求是来自外部（非 localhost/内网），用请求本身的地址
+	if !isInternalHost(host, cfg.InternalNetworks) {
+		return fmt.Sprintf("%s://%s", scheme, strings.Split(host, ",")[0])
+	}
+
 	return cfg.BaseURL
 }
 
@@ -366,7 +381,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="http://localhost:10088/officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="__API_JS_BASE__/officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -635,7 +650,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.22
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.23
     </p>
   </div>
 </div>
@@ -758,7 +773,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.02"
+const AppVersion = "1.0.23"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release

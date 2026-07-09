@@ -11,14 +11,16 @@ user_name = os.environ.get('HTTP_X_TRIM_USERNAME', '')
 user_dir  = f'/vol1/{user_id}' if user_id and user_id != 'anonymous' else '/vol1/1000'
 is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
 
-referer = os.environ.get('HTTP_REFERER', '')
-fnos_host = '127.0.0.1'
-m = re.search(r'https?://([^/:]+)', referer)
-if m: fnos_host = m.group(1)
+# ---- 前端 API 使用 nginx 代理路径（同源访问，适用于 App / 浏览器 / fnconnect 等所有场景）----
+# nginx 已将 /officeeditor-api/ → 127.0.0.1:10088
+# 前端 JS 通过这个路径调用连接器的所有 /api/* 接口
 connector_base = f'http://127.0.0.1:10088'
-api_base = f'http://{fnos_host}:10088'
+api_base = f'/officeeditor-api'
 
-# ---- 代理 OnlyOffice JS/CSS (支持 FN Connect 远程) ----
+# 以下变量仅用于 CGI 内部调用，不暴露给前端
+request_host = os.environ.get('HTTP_HOST', '127.0.0.1').split(':')[0]
+
+# ---- 代理 OnlyOffice JS/CSS（所有场景使用本地回源）----
 if '/officeds/' in os.environ.get('REQUEST_URI', ''):
     target = os.environ.get('REQUEST_URI', '')
     idx = target.find('/officeds/')
@@ -45,7 +47,8 @@ if action == 'create':
 
 if file_path:
     encoded = urllib.parse.quote(file_path)
-    editor_url = f'{connector_base}/editor?path={encoded}&host={fnos_host}'
+    # 不再传 host 参数（handleEditorPage 已不使用它）
+    editor_url = f'{connector_base}/editor?path={encoded}'
     if user_id: editor_url += f'&user_id={urllib.parse.quote(user_id)}'
     if user_name: editor_url += f'&user_name={urllib.parse.quote(user_name)}'
     result = subprocess.run(['curl','-s',editor_url], capture_output=True, text=True, timeout=10)
@@ -54,8 +57,8 @@ if file_path:
         print('Content-Type: text/html; charset=utf-8\n')
         print('<html><body><h1>错误</h1><p>无法连接到编辑器服务</p></body></html>')
     else:
-        html = html.replace('127.0.0.1:9080', f'{fnos_host}:9080')
-        html = html.replace('localhost:10088', f'{fnos_host}:10088')
+        # api.js 已使用相对路径 /officeds/，不需要 URL 替换
+        # download/callback URL 使用 cfg.BaseURL（NAS 内网 IP），由 Document Server 服务器端调用
         print('Content-Type: text/html; charset=utf-8\n')
         print(html)
     sys.exit(0)

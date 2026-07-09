@@ -51,6 +51,7 @@ if [ "$REMOVE_DATA" = "true" ]; then
   # nginx 配置
   rm -f /usr/trim/nginx/conf/conf.d/officeeditor.conf       2>/dev/null || true
   rm -f /usr/trim/nginx/conf/conf.d/officeeditor-officeds.conf 2>/dev/null || true
+	rm -f /usr/trim/nginx/conf/conf.d/officeeditor-api.conf    2>/dev/null || true
   rm -f /etc/nginx/conf.d/officeeditor.conf                 2>/dev/null || true
   rm -f /etc/nginx/sites-enabled/officeeditor.conf          2>/dev/null || true
   /usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || nginx -s reload 2>/dev/null || true
