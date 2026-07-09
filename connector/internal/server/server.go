@@ -430,7 +430,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	ts := time.Now().Format("20060102_1.0.09")
+	ts := time.Now().Format("20060102_1.0.10")
 	name := fmt.Sprintf("新建%s文档_%s.%s", map[string]string{"docx":"Word","xlsx":"Excel","pptx":"PowerPoint"}[docType], ts, ext)
 	filePath := filepath.Join(dir, name)
 

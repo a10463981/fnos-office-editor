@@ -9,6 +9,7 @@ action = params.get('action', [''])[0]
 user_id   = os.environ.get('HTTP_X_TRIM_USERID', 'anonymous')
 user_name = os.environ.get('HTTP_X_TRIM_USERNAME', '')
 user_dir  = f'/vol1/{user_id}' if user_id and user_id != 'anonymous' else '/vol1/1000'
+is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
 
 referer = os.environ.get('HTTP_REFERER', '')
 fnos_host = '127.0.0.1'
@@ -59,6 +60,6 @@ if file_path:
         print(html)
     sys.exit(0)
 
-result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&user_id={user_id}'], capture_output=True, text=True, timeout=10)
+result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&user_id={user_id}&is_admin={is_admin}'], capture_output=True, text=True, timeout=10)
 print('Content-Type: text/html; charset=utf-8\n')
 print(result.stdout)
