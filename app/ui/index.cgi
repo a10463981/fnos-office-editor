@@ -12,6 +12,10 @@ user_dir  = f'/vol1/{user_id}' if user_id and user_id != 'anonymous' else '/vol1
 
 referer = os.environ.get('HTTP_REFERER', '')
 fnos_host = '127.0.0.1'
+m = re.search(r'https?://([^/:]+)', referer)
+if m: fnos_host = m.group(1)
+connector_base = f'http://127.0.0.1:10088'
+api_base = f'http://{fnos_host}:10088'
 
 # ---- 代理 OnlyOffice JS/CSS (支持 FN Connect 远程) ----
 if '/officeds/' in os.environ.get('REQUEST_URI', ''):
@@ -28,24 +32,6 @@ if '/officeds/' in os.environ.get('REQUEST_URI', ''):
         print('Status: 404')
         print()
     sys.exit(0)
-m = re.search(r'https?://([^/:]+)', referer)
-if m: fnos_host = m.group(1)
-connector_base = f'http://127.0.0.1:10088'
-
-# ---- 赞助图片 ----
-if '/sponsor/' in os.environ.get('REQUEST_URI', ''):
-    img_name = 'donate-wechat.png' if 'wechat' in os.environ.get('REQUEST_URI', '') else 'donate-alipay.png'
-    img_path = f'{os.environ.get("TRIM_APPDEST", "/var/apps/OfficeEditor/target")}/ui/images/{img_name}'
-    if os.path.exists(img_path):
-        print(f'Content-Type: image/png')
-        print()
-        with open(img_path, 'rb') as f:
-            sys.stdout.buffer.write(f.read())
-    else:
-        print('Status: 404')
-        print()
-    sys.exit(0)
-api_base = f'http://{fnos_host}:10088'
 
 if action == 'create':
     doc_type = params.get('type', ['docx'])[0]
@@ -73,7 +59,6 @@ if file_path:
         print(html)
     sys.exit(0)
 
-is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
-result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&is_admin={is_admin}'], capture_output=True, text=True, timeout=10)
+result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&user_id={user_id}'], capture_output=True, text=True, timeout=10)
 print('Content-Type: text/html; charset=utf-8\n')
 print(result.stdout)
