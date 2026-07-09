@@ -56,7 +56,7 @@ func NewServer(cfg *Config) http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/history", func(w http.ResponseWriter, r *http.Request) {
-		handleHistory(w, r, cfg)
+		handleHistory(w, cfg)
 	})
 	mux.HandleFunc("POST /api/create", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDocument(w, r, cfg)
@@ -70,12 +70,6 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
 		handleSaveConfig(w, r, cfg)
 	})
-	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
-		handleVersion(w)
-	})
-	mux.HandleFunc("GET /api/check-update", func(w http.ResponseWriter, r *http.Request) {
-		handleCheckUpdate(w)
-	})
 
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
@@ -88,12 +82,6 @@ func NewServer(cfg *Config) http.Handler {
 	})
 	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
-	})
-	mux.HandleFunc("GET /officeds/", func(w http.ResponseWriter, r *http.Request) {
-		handleOfficedsProxy(w, r)
-	})
-	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
-		handleSponsorImage(w, r)
 	})
 	return corsHandler(mux)
 }
@@ -161,14 +149,6 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		http.Error(w, "missing path", http.StatusBadRequest)
 		return
 	}
-	if !isSafePath(filePath) || !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	if !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
-		http.Error(w, "access denied", http.StatusForbidden)
-		return
-	}
 
 	// Get effective host for URLs (from CGI proxy)
 	overrideHost := getHostOverride(r)
@@ -180,18 +160,14 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	configJSON := buildEditorConfig(filePath, r, cfg, baseURL)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
+	addToHistory(cfg, filePath)
 	fmt.Fprintf(w, editorPageHTML, configJSON)
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
-	if !isSafePath(filePath) || !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
-	if !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+	if filePath == "" {
+		http.Error(w, "missing path", http.StatusBadRequest)
 		return
 	}
 	http.ServeFile(w, r, filePath)
@@ -200,10 +176,6 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 func handleCallback(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
-		json.NewEncoder(w).Encode(map[string]int{"error": 1})
-		return
-	}
-	if !isSafePath(filePath) {
 		json.NewEncoder(w).Encode(map[string]int{"error": 1})
 		return
 	}
@@ -403,32 +375,31 @@ type HistoryEntry struct {
 	OpenedAt  string `json:"openedAt"`
 }
 
-func historyFilePath(cfg *Config, userId string) string {
+func historyFilePath(cfg *Config) string {
 	d := os.Getenv("TRIM_PKGVAR")
 	if d == "" { d = "/var/apps/OfficeEditor/var" }
-	if userId == "" { userId = "shared" }
-	return d + "/history_" + userId + ".json"
+	return d + "/history.json"
 }
 
-func loadHistory(cfg *Config, userId string) []HistoryEntry {
-	data, err := os.ReadFile(historyFilePath(cfg, userId))
+func loadHistory(cfg *Config) []HistoryEntry {
+	data, err := os.ReadFile(historyFilePath(cfg))
 	if err != nil { return nil }
 	var entries []HistoryEntry
 	json.Unmarshal(data, &entries)
 	return entries
 }
 
-func saveHistory(cfg *Config, entries []HistoryEntry, userId string) {
+func saveHistory(cfg *Config, entries []HistoryEntry) {
 	// Keep last 50
 	if len(entries) > 50 { entries = entries[len(entries)-50:] }
 	data, _ := json.MarshalIndent(entries, "", "  ")
-	os.MkdirAll(filepath.Dir(historyFilePath(cfg, userId)), 0755)
-	os.WriteFile(historyFilePath(cfg, userId), data, 0644)
+	os.MkdirAll(filepath.Dir(historyFilePath(cfg)), 0755)
+	os.WriteFile(historyFilePath(cfg), data, 0644)
 }
 
-func addToHistory(cfg *Config, filePath string, userId string) {
+func addToHistory(cfg *Config, filePath string) {
 	name := filepath.Base(filePath)
-	entries := loadHistory(cfg, userId)
+	entries := loadHistory(cfg)
 	// Remove existing entry for this path
 	filtered := make([]HistoryEntry, 0, len(entries))
 	for _, e := range entries {
@@ -436,12 +407,11 @@ func addToHistory(cfg *Config, filePath string, userId string) {
 	}
 	// Prepend new entry
 	filtered = append([]HistoryEntry{{Path: filePath, Name: name, OpenedAt: time.Now().Format("2006-01-02 15:04")}}, filtered...)
-	saveHistory(cfg, filtered, userId)
+	saveHistory(cfg, filtered)
 }
 
-func handleHistory(w http.ResponseWriter, r *http.Request, cfg *Config) {
-	userId := r.URL.Query().Get("user_id")
-	entries := loadHistory(cfg, userId)
+func handleHistory(w http.ResponseWriter, cfg *Config) {
+	entries := loadHistory(cfg)
 	if entries == nil { entries = []HistoryEntry{} }
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(entries)
@@ -458,7 +428,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	ts := time.Now().Format("20060102_150405")
+	ts := time.Now().Format("20060102_1.0.06")
 	name := fmt.Sprintf("新建%s文档_%s.%s", map[string]string{"docx":"Word","xlsx":"Excel","pptx":"PowerPoint"}[docType], ts, ext)
 	filePath := filepath.Join(dir, name)
 
@@ -479,7 +449,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	}
 	f.Close()
 
-	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
+	addToHistory(cfg, filePath)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": filePath, "name": name})
@@ -524,11 +494,6 @@ func restartOnlyOfficeContainer(conf *AppConfig) {
 	cmd.Env = append(os.Environ(), "FONTS_DIR="+fontsDir)
 	cmd.Dir = composeDir
 	cmd.Run()
-	// Wait for container to start, then rebuild font cache
-	time.Sleep(5 * time.Second)
-	exec.Command("docker", "exec", "officeeditor-docserver", "fc-cache", "-fv").Run()
-	// Also restart document server services to pick up new fonts
-	exec.Command("docker", "exec", "officeeditor-docserver", "supervisorctl", "restart", "all").Run()
 }
 
 type AppConfig struct {
@@ -562,26 +527,18 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	userName := r.URL.Query().Get("user_name")
 	if userName == "" { userName = "FNos 用户" }
 	apiBase := r.URL.Query().Get("api_base")
-    userId := r.URL.Query().Get("user_id"); if userId == "" { userId = "1000" }
 	if apiBase == "" { apiBase = "http://localhost:10088" }
-	isAdmin := r.URL.Query().Get("is_admin")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
 	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
 	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
-    html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
-	if isAdmin == "true" {
-		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "", 1)
-	} else {
-		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "HIDDEN_BY_ADMIN_CHECK", 1)
-	}
 	fmt.Fprint(w, html)
 }
 
 const homePageHTML = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>office 协作</title>
+<title>FNos 办公编辑器</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;color:#333;min-height:100vh}
@@ -611,7 +568,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .settings-btn{cursor:pointer;font-size:24px;opacity:.8;transition:opacity .2s}.settings-btn:hover{opacity:1}
-.settings-btn.HIDDEN_BY_ADMIN_CHECK{display:none!important}
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;justify-content:center;align-items:center}
 .modal-overlay.show{display:flex}
 .modal{background:#fff;border-radius:12px;padding:28px;width:90%;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
@@ -622,8 +578,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .modal .btn-save{background:#1a73e8;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 .modal .btn-cancel{background:#f0f0f0;color:#333;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 </style></head><body>
-<div id="updateBar" style="display:none;background:#e74c3c;color:#fff;text-align:center;padding:6px;font-size:13px"></div>
-<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 office 协作</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn IS_ADMIN_PLACEHOLDER" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
+<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
 <div class="content">
   <div class="section">
     <h2>新建文档</h2>
@@ -632,42 +587,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <button class="btn btn-excel" onclick="createDoc('xlsx')"><span>📊</span> Excel 表格</button>
       <button class="btn btn-ppt" onclick="createDoc('pptx')"><span>📽️</span> PPT 演示</button>
     </div>
-    <p style="font-size:12px;color:#999;margin-top:8px">📁 新建文件将保存在您的个人目录中</p>
   </div>
   <div class="section">
     <h2>最近打开</h2>
     <div class="history-list" id="history"></div>
   </div>
 </div>
-  <div class="section" style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px solid #eee">
-    <h2>赞助支持</h2>
-    <p style="font-size:13px;color:#666;margin-bottom:12px">你的赞助是我更新的动力 💪</p>
-    <div>
-      <img id="wechatQr" style="width:160px;margin:0 8px" alt="微信赞助">
-      <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
-    </div>
-    <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> · <span id="currentVersion" style="color:#2ecc71">v1.0.02</span><span id="updateHint" style="display:none"></span>
-    </p>
-  </div>
-</div>
-
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <h3>⚙️ 字体设置</h3>
     <label>自定义字体目录路径（.ttf/.otf 文件将自动加载到 OnlyOffice）</label>
     <input type="text" id="fontsDirInput" placeholder="/vol1/1000/我的字体/">
-    <p style="font-size:12px;color:#999;margin:-8px 0 12px 0">⚠️ 点击保存后 Docker 重建需要约 20 秒，请耐心等待提示成功后再操作。</p>
     <div class="actions">
       <button class="btn-cancel" onclick="closeSettings()">取消</button>
-      <button class="btn-save" id="btnSaveSettings" onclick="saveSettings()">保存并生效</button>
+      <button class="btn-save" onclick="saveSettings()">保存并生效</button>
     </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
 var userDir="USER_DIR_PLACEHOLDER";
-var userId="USER_ID_PLACEHOLDER";
 var apiBase="API_BASE_PLACEHOLDER";
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 function createDoc(type){
@@ -683,7 +622,7 @@ function createDoc(type){
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
 function loadHistory(){
-  fetch(apiBase+"/api/history?user_id="+encodeURIComponent(userId))
+  fetch(apiBase+"/api/history")
     .then(r=>r.json())
     .then(items=>{
       var h=document.getElementById("history");
@@ -706,19 +645,12 @@ function closeSettings(){
 }
 function saveSettings(){
   var dir=document.getElementById("fontsDirInput").value.trim();
-  if(!dir){toast("请输入字体目录路径") ;return;}
-  var btn=document.getElementById("btnSaveSettings");
-  btn.disabled=true;btn.textContent="Docker 重启中...";
+  if(!dir){toast("请输入字体目录路径");return;}
   fetch(apiBase+"/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
     .then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})
     .then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败: "+d.error);closeSettings();})
-    .catch(e=>{toast("保存失败: "+e.message);})
-    .finally(function(){btn.disabled=false;btn.textContent="保存并生效";});
+    .catch(e=>{toast("保存失败: "+e.message);console.error("saveSettings error:",e)});
 }
-
-document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
-document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
-fetch(apiBase+"/api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
 loadHistory();
 </script>
 </body></html>`
@@ -736,77 +668,8 @@ func corsHandler(next http.Handler) http.Handler {
 	})
 }
 
-func isSafePath(p string) bool {
-	if p == "" || strings.Contains(p, "..") { return false }
-	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
-}
-
-func hasFileAccess(filePath string, userId string) bool {
-	if userId == "" { return false }
-	parts := strings.Split(filePath, "/")
-	if len(parts) < 4 { return false }
-	// User can access: /vol{X}/{userId}/...
-	return strings.HasPrefix(filePath, "/vol/"+parts[2]+"/"+userId+"/") || filePath == "/vol/"+parts[2]+"/"+userId
-}
-
-func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
-	backend := "http://127.0.0.1:9080" + r.URL.Path[len("/officeds"):]
-	if r.URL.RawQuery != "" { backend += "?" + r.URL.RawQuery }
-	resp, err := http.Get(backend)
-	if err != nil { http.Error(w, "proxy error", 502); return }
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
-}
-
 func base64URLEncode(data []byte) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
-}
-
-func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
-	// Serve sponsor QR images from app/ui/images/
-	basePath := "/var/apps/OfficeEditor/target/ui/images"
-	if r.URL.Path == "/sponsor/wechat" {
-		http.ServeFile(w, r, basePath+"/donate-wechat.png")
-	} else {
-		http.ServeFile(w, r, basePath+"/donate-alipay.png")
-	}
-}
-
-const AppVersion = "1.0.02"
-
-func handleCheckUpdate(w http.ResponseWriter) {
-	// Check GitHub for latest release
-	resp, err := http.Get("https://api.github.com/repos/a10463981/fnos-office-editor/releases/latest")
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"update": false, "error": "network"})
-		return
-	}
-	defer resp.Body.Close()
-	var release struct {
-		TagName string 
-		HTMLURL string 
-	}
-	json.NewDecoder(resp.Body).Decode(&release)
-	latest := strings.TrimPrefix(release.TagName, "v")
-	hasUpdate := latest != "" && latest != AppVersion
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"update":    hasUpdate,
-		"current":   AppVersion,
-		"latest":    latest,
-		"url":       release.HTMLURL,
-	})
-}
-
-func handleVersion(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"version":   AppVersion,
-		"connector": "ok",
-	})
 }
 
 // ooxmlTemplate generates a minimal valid OOXML template
