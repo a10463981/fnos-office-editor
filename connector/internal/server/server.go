@@ -92,7 +92,7 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
-	mux.HandleFunc("GET /officeds/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/officeds/", func(w http.ResponseWriter, r *http.Request) {
 		handleOfficedsProxy(w, r)
 	})
 	return corsHandler(mux)
@@ -631,7 +631,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.14
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.15
     </p>
   </div>
 </div>
@@ -728,11 +728,14 @@ func isSafePath(p string) bool {
 func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
 	backend := "http://127.0.0.1:9080" + strings.TrimPrefix(r.URL.Path, "/officeds")
 	if r.URL.RawQuery != "" { backend += "?" + r.URL.RawQuery }
-	resp, err := http.Get(backend)
+	// Forward the request with the original method
+	req, err := http.NewRequest(r.Method, backend, r.Body)
+	if err != nil { http.Error(w, "proxy error", 502); return }
+	req.Header = r.Header
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil { http.Error(w, "proxy error", 502); return }
 	defer resp.Body.Close()
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	for k, v := range resp.Header { w.Header()[k] = v }
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 }
