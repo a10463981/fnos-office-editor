@@ -119,9 +119,14 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	// 始终使用 cfg.BaseURL（NAS 内网 IP）作为 download/callback URL
-	// 因为 OnlyOffice Document Server (Docker 9080) 从服务器端调用这些地址
-	baseURL := cfg.BaseURL
+	// 文档下载/回调地址必须从 OnlyOffice Docker 容器可达
+	// 使用 host.docker.internal 让容器访问主机端口 10088
+	docURL := cfg.BaseURL
+	if cfg.PublicBaseURL != "" && !isInternalHost(r.Host, cfg.InternalNetworks) {
+		docURL = cfg.PublicBaseURL
+	} else {
+		docURL = "http://host.docker.internal:10088"
+	}
 
 	mode := r.URL.Query().Get("mode")
 	canEdit := editable(ext) && mode != "view"
@@ -132,8 +137,8 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	h := sha256.Sum256([]byte(keyData))
 	docKey := fmt.Sprintf("%x", h)[:20]
 
-	downloadURL := fmt.Sprintf("%s/api/download?path=%s", baseURL, url.QueryEscape(filePath))
-	callbackURL := fmt.Sprintf("%s/api/callback?path=%s", baseURL, url.QueryEscape(filePath))
+	downloadURL := fmt.Sprintf("%s/api/download?path=%s", docURL, url.QueryEscape(filePath))
+	callbackURL := fmt.Sprintf("%s/api/callback?path=%s", docURL, url.QueryEscape(filePath))
 
 	config := map[string]interface{}{
 		"document": map[string]interface{}{
@@ -173,9 +178,10 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// 文档下载/回调 URL 使用 cfg.BaseURL（NAS 内网 IP）
+	// 文档下载/回调 URL 使用 host.docker.internal（Docker 容器可达）
 	// 因为 OnlyOffice Document Server (Docker 内) 需要从服务器端调用这些地址
-	configJSON := buildEditorConfig(filePath, r, cfg, cfg.BaseURL)
+	dockerURL := "http://host.docker.internal:10088"
+	configJSON := buildEditorConfig(filePath, r, cfg, dockerURL)
 
 	// OnlyOffice API JS 始终通过连接器自身 /officeds/ 代理加载
 	// 连接器将 /officeds/ → OnlyOffice Document Server (9080)
@@ -657,7 +663,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.28
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.29
     </p>
   </div>
 </div>
@@ -780,7 +786,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.28"
+const AppVersion = "1.0.29"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release

@@ -1,5 +1,5 @@
 appname="OfficeEditor"
-version="1.0.28"
+version="1.0.29"
 display_name="office 协作"
 desc="office 协作 — 基于 OnlyOffice 的 FNos 在线文档编辑器。支持 Word/Excel/PPT 在线编辑、多人协作、用户身份识别、自定义字体。双击或右键 Office 文件即可编辑。GitHub: github.com/a10463981/fnos-office-editor"
 maintainer="OnlyOffice"
@@ -8,7 +8,7 @@ maintainer_url="https://github.com/a10463981/fnos-office-editor"
 source="thirdparty"
 platform="all"
 min_version="0.8.28"
-change_log="v1.0.28: 修复 App 内网外网无法访问，前端 API 路径改为 nginx 同源代理，支持 PUBLIC_BASE_URL 配置：支持 DOCX/XLSX/PPTX 在线编辑，FNos 用户认证集成，内外网自适应访问，原生 Go 连接器服务。"
+change_log="v1.0.29: 修复 App 内网外网无法访问，前端 API 路径改为 nginx 同源代理，支持 PUBLIC_BASE_URL 配置：支持 DOCX/XLSX/PPTX 在线编辑，FNos 用户认证集成，内外网自适应访问，原生 Go 连接器服务。"
 port=10088
 desktop_uidir=ui
 desktop_applaunchname=OfficeEditor.Desktop
