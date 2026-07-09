@@ -699,7 +699,7 @@ function saveSettings(){
 }
 
 
-document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
+document.getElementById('wechatQr').src=apiBase+'/sponsor/donate';
 document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
 fetch(apiBase+"/api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
 loadHistory();
@@ -726,10 +726,10 @@ func base64URLEncode(data []byte) string {
 func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	// Serve sponsor QR images from app/ui/images/
 	basePath := "/var/apps/OfficeEditor/target/ui/images"
-	if r.URL.Path == "/sponsor/wechat" {
-		http.ServeFile(w, r, basePath+"/donate-wechat.png")
+	if r.URL.Path == "/sponsor/donate" {
+		http.ServeFile(w, r, basePath+"/donate.png")
 	} else {
-		http.ServeFile(w, r, basePath+"/donate-alipay.png")
+		http.ServeFile(w, r, basePath+"/donate.png")
 	}
 }
 
