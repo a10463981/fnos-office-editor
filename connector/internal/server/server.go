@@ -70,6 +70,12 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
 		handleSaveConfig(w, r, cfg)
 	})
+	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
+		handleVersion(w)
+	})
+	mux.HandleFunc("GET /api/check-update", func(w http.ResponseWriter, r *http.Request) {
+		handleCheckUpdate(w)
+	})
 
 	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
@@ -82,6 +88,9 @@ func NewServer(cfg *Config) http.Handler {
 	})
 	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
+	})
+	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
+		handleSponsorImage(w, r)
 	})
 	return corsHandler(mux)
 }
@@ -430,7 +439,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	ts := time.Now().Format("20060102_1.0.10")
+	ts := time.Now().Format("20060102_150405")
 	name := fmt.Sprintf("新建%s文档_%s.%s", map[string]string{"docx":"Word","xlsx":"Excel","pptx":"PowerPoint"}[docType], ts, ext)
 	filePath := filepath.Join(dir, name)
 
@@ -496,6 +505,11 @@ func restartOnlyOfficeContainer(conf *AppConfig) {
 	cmd.Env = append(os.Environ(), "FONTS_DIR="+fontsDir)
 	cmd.Dir = composeDir
 	cmd.Run()
+	// Wait for container to start, then rebuild font cache
+	time.Sleep(5 * time.Second)
+	exec.Command("docker", "exec", "officeeditor-docserver", "fc-cache", "-fv").Run()
+	// Also restart document server services to pick up new fonts
+	exec.Command("docker", "exec", "officeeditor-docserver", "supervisorctl", "restart", "all").Run()
 }
 
 type AppConfig struct {
@@ -532,18 +546,24 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	if apiBase == "" { apiBase = "http://localhost:10088" }
 	userId := r.URL.Query().Get("user_id")
 	if userId == "" { userId = "anonymous" }
+	isAdmin := r.URL.Query().Get("is_admin")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
 	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
 	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
 	html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
+	if isAdmin == "true" {
+		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "", 1)
+	} else {
+		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "HIDDEN_BY_ADMIN_CHECK", 1)
+	}
 	fmt.Fprint(w, html)
 }
 
 const homePageHTML = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FNos 办公编辑器</title>
+<title>office 协作</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;color:#333;min-height:100vh}
@@ -573,6 +593,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .settings-btn{cursor:pointer;font-size:24px;opacity:.8;transition:opacity .2s}.settings-btn:hover{opacity:1}
+.settings-btn.HIDDEN_BY_ADMIN_CHECK{display:none!important}
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;justify-content:center;align-items:center}
 .modal-overlay.show{display:flex}
 .modal{background:#fff;border-radius:12px;padding:28px;width:90%;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
@@ -583,7 +604,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .modal .btn-save{background:#1a73e8;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 .modal .btn-cancel{background:#f0f0f0;color:#333;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 </style></head><body>
-<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 FNos 办公编辑器</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
+<div id="updateBar" style="display:none;background:#e74c3c;color:#fff;text-align:center;padding:6px;font-size:13px"></div>
+<div class="header"><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>📄 office 协作</h1><p>欢迎 USER_NAME_PLACEHOLDER，在线编辑 Word / Excel / PPT</p></div><span class="settings-btn IS_ADMIN_PLACEHOLDER" onclick="openSettings()" title="字体设置">⚙️</span></div></div>
 <div class="content">
   <div class="section">
     <h2>新建文档</h2>
@@ -592,20 +614,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <button class="btn btn-excel" onclick="createDoc('xlsx')"><span>📊</span> Excel 表格</button>
       <button class="btn btn-ppt" onclick="createDoc('pptx')"><span>📽️</span> PPT 演示</button>
     </div>
+    <p style="font-size:12px;color:#999;margin-top:8px">📁 新建文件将保存在您的个人目录中</p>
   </div>
   <div class="section">
     <h2>最近打开</h2>
     <div class="history-list" id="history"></div>
   </div>
 </div>
+  <div class="section" style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px solid #eee">
+    <h2>赞助支持</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:12px">你的赞助是我更新的动力 💪</p>
+    <div>
+      <img id="wechatQr" style="width:160px;margin:0 8px" alt="微信赞助">
+      <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
+    </div>
+    <p style="font-size:11px;color:#999;margin-top:12px">
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.11
+    </p>
+  </div>
+</div>
+
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <h3>⚙️ 字体设置</h3>
     <label>自定义字体目录路径（.ttf/.otf 文件将自动加载到 OnlyOffice）</label>
     <input type="text" id="fontsDirInput" placeholder="/vol1/1000/我的字体/">
+    <p style="font-size:12px;color:#999;margin:-8px 0 12px 0">⚠️ 点击保存后 Docker 重建需要约 20 秒，请耐心等待提示成功后再操作。</p>
     <div class="actions">
       <button class="btn-cancel" onclick="closeSettings()">取消</button>
-      <button class="btn-save" onclick="saveSettings()">保存并生效</button>
+      <button class="btn-save" id="btnSaveSettings" onclick="saveSettings()">保存并生效</button>
     </div>
   </div>
 </div>
@@ -651,12 +688,20 @@ function closeSettings(){
 }
 function saveSettings(){
   var dir=document.getElementById("fontsDirInput").value.trim();
-  if(!dir){toast("请输入字体目录路径");return;}
+  if(!dir){toast("请输入字体目录路径") ;return;}
+  var btn=document.getElementById("btnSaveSettings");
+  btn.disabled=true;btn.textContent="Docker 重启中...";
   fetch(apiBase+"/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
     .then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})
     .then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败: "+d.error);closeSettings();})
-    .catch(e=>{toast("保存失败: "+e.message);console.error("saveSettings error:",e)});
+    .catch(e=>{toast("保存失败: "+e.message);})
+    .finally(function(){btn.disabled=false;btn.textContent="保存并生效";});
 }
+
+
+document.getElementById('wechatQr').src=apiBase+'/sponsor/wechat';
+document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
+fetch(apiBase+"/api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
 loadHistory();
 </script>
 </body></html>`
@@ -676,6 +721,50 @@ func corsHandler(next http.Handler) http.Handler {
 
 func base64URLEncode(data []byte) string {
 	return strings.TrimRight(base64.URLEncoding.EncodeToString(data), "=")
+}
+
+func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
+	// Serve sponsor QR images from app/ui/images/
+	basePath := "/var/apps/OfficeEditor/target/ui/images"
+	if r.URL.Path == "/sponsor/wechat" {
+		http.ServeFile(w, r, basePath+"/donate-wechat.png")
+	} else {
+		http.ServeFile(w, r, basePath+"/donate-alipay.png")
+	}
+}
+
+const AppVersion = "1.0.02"
+
+func handleCheckUpdate(w http.ResponseWriter) {
+	// Check GitHub for latest release
+	resp, err := http.Get("https://api.github.com/repos/a10463981/fnos-office-editor/releases/latest")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"update": false, "error": "network"})
+		return
+	}
+	defer resp.Body.Close()
+	var release struct {
+		TagName string 
+		HTMLURL string 
+	}
+	json.NewDecoder(resp.Body).Decode(&release)
+	latest := strings.TrimPrefix(release.TagName, "v")
+	hasUpdate := latest != "" && latest != AppVersion
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"update":    hasUpdate,
+		"current":   AppVersion,
+		"latest":    latest,
+		"url":       release.HTMLURL,
+	})
+}
+
+func handleVersion(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"version":   AppVersion,
+		"connector": "ok",
+	})
 }
 
 // ooxmlTemplate generates a minimal valid OOXML template
