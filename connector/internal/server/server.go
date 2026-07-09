@@ -56,7 +56,7 @@ func NewServer(cfg *Config) http.Handler {
 	})
 
 	mux.HandleFunc("GET /api/history", func(w http.ResponseWriter, r *http.Request) {
-		handleHistory(w, cfg)
+		handleHistory(w, r, cfg)
 	})
 	mux.HandleFunc("POST /api/create", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDocument(w, r, cfg)
@@ -160,7 +160,7 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	configJSON := buildEditorConfig(filePath, r, cfg, baseURL)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	addToHistory(cfg, filePath)
+	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
 	fmt.Fprintf(w, editorPageHTML, configJSON)
 }
 
@@ -375,31 +375,32 @@ type HistoryEntry struct {
 	OpenedAt  string `json:"openedAt"`
 }
 
-func historyFilePath(cfg *Config) string {
+func historyFilePath(cfg *Config, userId string) string {
 	d := os.Getenv("TRIM_PKGVAR")
 	if d == "" { d = "/var/apps/OfficeEditor/var" }
-	return d + "/history.json"
+	if userId == "" { userId = "shared" }
+	return d + "/history_" + userId + ".json"
 }
 
-func loadHistory(cfg *Config) []HistoryEntry {
-	data, err := os.ReadFile(historyFilePath(cfg))
+func loadHistory(cfg *Config, userId string) []HistoryEntry {
+	data, err := os.ReadFile(historyFilePath(cfg, userId))
 	if err != nil { return nil }
 	var entries []HistoryEntry
 	json.Unmarshal(data, &entries)
 	return entries
 }
 
-func saveHistory(cfg *Config, entries []HistoryEntry) {
+func saveHistory(cfg *Config, entries []HistoryEntry, userId string) {
 	// Keep last 50
 	if len(entries) > 50 { entries = entries[len(entries)-50:] }
 	data, _ := json.MarshalIndent(entries, "", "  ")
-	os.MkdirAll(filepath.Dir(historyFilePath(cfg)), 0755)
-	os.WriteFile(historyFilePath(cfg), data, 0644)
+	os.MkdirAll(filepath.Dir(historyFilePath(cfg, userId)), 0755)
+	os.WriteFile(historyFilePath(cfg, userId), data, 0644)
 }
 
-func addToHistory(cfg *Config, filePath string) {
+func addToHistory(cfg *Config, filePath string, userId string) {
 	name := filepath.Base(filePath)
-	entries := loadHistory(cfg)
+	entries := loadHistory(cfg, userId)
 	// Remove existing entry for this path
 	filtered := make([]HistoryEntry, 0, len(entries))
 	for _, e := range entries {
@@ -407,11 +408,12 @@ func addToHistory(cfg *Config, filePath string) {
 	}
 	// Prepend new entry
 	filtered = append([]HistoryEntry{{Path: filePath, Name: name, OpenedAt: time.Now().Format("2006-01-02 15:04")}}, filtered...)
-	saveHistory(cfg, filtered)
+	saveHistory(cfg, filtered, userId)
 }
 
-func handleHistory(w http.ResponseWriter, cfg *Config) {
-	entries := loadHistory(cfg)
+func handleHistory(w http.ResponseWriter, r *http.Request, cfg *Config) {
+	userId := r.URL.Query().Get("user_id")
+	entries := loadHistory(cfg, userId)
 	if entries == nil { entries = []HistoryEntry{} }
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(entries)
@@ -428,7 +430,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	ts := time.Now().Format("20060102_1.0.06")
+	ts := time.Now().Format("20060102_1.0.07")
 	name := fmt.Sprintf("新建%s文档_%s.%s", map[string]string{"docx":"Word","xlsx":"Excel","pptx":"PowerPoint"}[docType], ts, ext)
 	filePath := filepath.Join(dir, name)
 
@@ -449,7 +451,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	}
 	f.Close()
 
-	addToHistory(cfg, filePath)
+	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": filePath, "name": name})
@@ -528,11 +530,14 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	if userName == "" { userName = "FNos 用户" }
 	apiBase := r.URL.Query().Get("api_base")
 	if apiBase == "" { apiBase = "http://localhost:10088" }
+	userId := r.URL.Query().Get("user_id")
+	if userId == "" { userId = "1000" }
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
 	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
 	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
+	html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
 	fmt.Fprint(w, html)
 }
 
@@ -607,6 +612,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 <script>
 var userDir="USER_DIR_PLACEHOLDER";
+var userId="USER_ID_PLACEHOLDER";
 var apiBase="API_BASE_PLACEHOLDER";
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 function createDoc(type){
@@ -622,7 +628,7 @@ function createDoc(type){
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
 function loadHistory(){
-  fetch(apiBase+"/api/history")
+  fetch(apiBase+"/api/history?user_id="+encodeURIComponent(userId))
     .then(r=>r.json())
     .then(items=>{
       var h=document.getElementById("history");
