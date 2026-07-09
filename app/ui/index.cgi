@@ -6,9 +6,9 @@ params = urllib.parse.parse_qs(qs)
 file_path = params.get('path', [None])[0]
 action = params.get('action', [''])[0]
 
-user_id   = os.environ.get('HTTP_X_TRIM_USERID', '')
+user_id   = os.environ.get('HTTP_X_TRIM_USERID', 'anonymous')
 user_name = os.environ.get('HTTP_X_TRIM_USERNAME', '')
-user_dir  = f'/vol1/{user_id}' if user_id else '/vol1/1000'
+user_dir  = f'/vol1/{user_id}' if user_id and user_id != 'anonymous' else '/vol1/1000'
 
 referer = os.environ.get('HTTP_REFERER', '')
 fnos_host = '127.0.0.1'
