@@ -97,8 +97,8 @@ func NewServer(cfg *Config) http.Handler {
 
 func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		http.Error(w, `{"error":"missing path"}`, http.StatusBadRequest)
+	if filePath == "" || !isSafePath(filePath) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 	info, err := os.Stat(filePath)
@@ -154,8 +154,8 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		http.Error(w, "missing path", http.StatusBadRequest)
+	if filePath == "" || !isSafePath(filePath) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -175,8 +175,8 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		http.Error(w, "missing path", http.StatusBadRequest)
+	if filePath == "" || !isSafePath(filePath) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	http.ServeFile(w, r, filePath)
@@ -184,7 +184,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 func handleCallback(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
+	if filePath == "" || !isSafePath(filePath) {
 		json.NewEncoder(w).Encode(map[string]int{"error": 1})
 		return
 	}
@@ -628,7 +628,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.11
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.12
     </p>
   </div>
 </div>
@@ -698,9 +698,8 @@ function saveSettings(){
 }
 
 
-document.getElementById('wechatQr').src=apiBase+'/sponsor/donate';
-document.getElementById('alipayQr').src=apiBase+'/sponsor/alipay';
 fetch(apiBase+"/api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
+document.getElementById('sponsorQr').src=apiBase+'/sponsor/donate';
 loadHistory();
 </script>
 </body></html>`
@@ -716,6 +715,11 @@ func corsHandler(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isSafePath(p string) bool {
+	if p == "" || strings.Contains(p, "..") { return false }
+	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
 }
 
 func base64URLEncode(data []byte) string {
