@@ -11,16 +11,50 @@ user_name = os.environ.get('HTTP_X_TRIM_USERNAME', '')
 user_dir  = f'/vol1/{user_id}' if user_id and user_id != 'anonymous' else '/vol1/1000'
 is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
 
-# ---- 前端 API 使用 nginx 代理路径（同源访问，适用于 App / 浏览器 / fnconnect 等所有场景）----
-# nginx 已将 /officeeditor-api/ → 127.0.0.1:10088
-# 前端 JS 通过这个路径调用连接器的所有 /api/* 接口
 connector_base = f'http://127.0.0.1:10088'
-api_base = f'/officeeditor-api'
 
-# 以下变量仅用于 CGI 内部调用，不暴露给前端
-request_host = os.environ.get('HTTP_HOST', '127.0.0.1').split(':')[0]
+# ---- 通用 API 代理：所有 /api/* 请求通过 CGI 内部转发 ----
+# 前端 JS 调用 fetch(apiBase + "/api/history?...")
+# 实际发起的请求是 fetch("/cgi/.../index.cgi?action=api&path=/api/history&...")
+if action == 'api':
+    api_path = params.get('path', [''])[0]
+    if not api_path.startswith('/api/'):
+        print('Status: 400')
+        print('Content-Type: application/json\n')
+        print('{"error":"invalid path"}')
+        sys.exit(0)
 
-# ---- 代理 OnlyOffice JS/CSS（所有场景使用本地回源）----
+    # 转发 HTTP 方法（保留 POST body）
+    method = os.environ.get('REQUEST_METHOD', 'GET').upper()
+    body_bytes = b''
+    content_length = os.environ.get('CONTENT_LENGTH', '0')
+    if content_length and content_length.isdigit() and int(content_length) > 0:
+        body_bytes = sys.stdin.buffer.read(int(content_length))
+
+    # 重建 query string（去掉 action 和 path 参数，保留其余参数）
+    orig_qs = os.environ.get('QUERY_STRING', '')
+    new_qs = []
+    for part in orig_qs.split('&'):
+        if part.startswith('action=') or part.startswith('path='):
+            continue
+        new_qs.append(part)
+    qs_suffix = ('?' + '&'.join(new_qs)) if new_qs else ''
+
+    url = f'{connector_base}{api_path}{qs_suffix}'
+
+    # 根据方法使用 curl 或 urllib
+    result = subprocess.run(['curl', '-s', '-X', method, '--data-binary', '@-', url],
+                          input=body_bytes, capture_output=True, timeout=30)
+
+    ct = result.stdout
+    if not ct:
+        ct = b'null'
+    print('Content-Type: application/json')
+    print()
+    sys.stdout.buffer.write(ct)
+    sys.exit(0)
+
+# ---- 代理 OnlyOffice JS/CSS ----
 if '/officeds/' in os.environ.get('REQUEST_URI', ''):
     target = os.environ.get('REQUEST_URI', '')
     idx = target.find('/officeds/')
@@ -36,6 +70,7 @@ if '/officeds/' in os.environ.get('REQUEST_URI', ''):
         print()
     sys.exit(0)
 
+# ---- 新建文档 ----
 if action == 'create':
     doc_type = params.get('type', ['docx'])[0]
     result = subprocess.run(['curl','-s','-X','POST',f'{connector_base}/api/create?type={doc_type}&dir={urllib.parse.quote(user_dir)}'], capture_output=True, text=True, timeout=10)
@@ -45,9 +80,9 @@ if action == 'create':
     print('Status: 302\n')
     sys.exit(0)
 
+# ---- 编辑器页面 ----
 if file_path:
     encoded = urllib.parse.quote(file_path)
-    # 不再传 host 参数（handleEditorPage 已不使用它）
     editor_url = f'{connector_base}/editor?path={encoded}'
     if user_id: editor_url += f'&user_id={urllib.parse.quote(user_id)}'
     if user_name: editor_url += f'&user_name={urllib.parse.quote(user_name)}'
@@ -57,12 +92,14 @@ if file_path:
         print('Content-Type: text/html; charset=utf-8\n')
         print('<html><body><h1>错误</h1><p>无法连接到编辑器服务</p></body></html>')
     else:
-        # api.js 已使用相对路径 /officeds/，不需要 URL 替换
-        # download/callback URL 使用 cfg.BaseURL（NAS 内网 IP），由 Document Server 服务器端调用
         print('Content-Type: text/html; charset=utf-8\n')
         print(html)
     sys.exit(0)
 
-result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={api_base}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&user_id={user_id}&is_admin={is_admin}'], capture_output=True, text=True, timeout=10)
+# ---- 首页（通过 action=api 代理方式）----
+cgi_self = '/cgi/ThirdParty/OfficeEditor/index.cgi'
+api_base = f'{cgi_self}?action=api&path='
+
+result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={urllib.parse.quote(api_base, safe="")}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&user_id={user_id}&is_admin={is_admin}'], capture_output=True, text=True, timeout=10)
 print('Content-Type: text/html; charset=utf-8\n')
 print(result.stdout)
