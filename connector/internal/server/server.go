@@ -531,7 +531,7 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	apiBase := r.URL.Query().Get("api_base")
 	if apiBase == "" { apiBase = "http://localhost:10088" }
 	userId := r.URL.Query().Get("user_id")
-	if userId == "" { userId = "1000" }
+	if userId == "" { userId = "anonymous" }
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
