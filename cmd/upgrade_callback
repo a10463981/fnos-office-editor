@@ -2,20 +2,69 @@
 # ============================================================================
 set -e
 # OfficeEditor - upgrade_callback
-# 升级后执行: 更新连接器二进制, 重启服务
+# 升级后执行: 更新连接器二进制, nginx 代理, 重启服务
 # ============================================================================
 
 echo "[OfficeEditor] upgrade_callback: 应用升级..."
 
-cp "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
+TRIM_APPDEST="${TRIM_APPDEST:-/var/apps/OfficeEditor/target}"
+
+# 1. 更新连接器二进制
+cp "$TRIM_APPDEST/connector/officeeditor-connector" /usr/local/bin/officeeditor-connector
 chmod +x /usr/local/bin/officeeditor-connector
 
+# 2. 确保 nginx 代理规则存在（兼容从旧版本升级）
+# 2a. OnlyOffice 代理（/officeds/ -> 9080）
+mkdir -p /usr/trim/nginx/conf/conf.d/
+cat > "/usr/trim/nginx/conf/conf.d/officeeditor-officeds.conf" << 'NGXEOF'
+location ^~ /officeds/ {
+   proxy_pass http://127.0.0.1:9080/;
+   proxy_set_header Host $host;
+   proxy_set_header X-Real-IP $remote_addr;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   proxy_http_version 1.1;
+   proxy_set_header Upgrade $http_upgrade;
+   proxy_set_header Connection $connection_upgrade;
+}
+NGXEOF
+
+# 2b. 连接器 API 代理（/officeeditor-api/ -> 10088）
+cat > "/usr/trim/nginx/conf/conf.d/officeeditor-api.conf" << 'NGXEOF'
+location ^~ /officeeditor-api/ {
+   proxy_pass http://127.0.0.1:10088/;
+   proxy_set_header Host $host;
+   proxy_set_header X-Real-IP $remote_addr;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_http_version 1.1;
+   proxy_read_timeout 120s;
+}
+NGXEOF
+
+/usr/trim/nginx/sbin/nginx -s reload 2>/dev/null || true
+echo "[OfficeEditor] nginx 代理已更新: /officeds/ + /officeeditor-api/"
+
+# 3. 确保环境配置文件存在（兼容旧版本升级）
+if [ ! -f "/etc/default/officeeditor-connector" ]; then
+    cat > "/etc/default/officeeditor-connector" << 'ENVEOF'
+# OfficeEditor Connector 环境变量配置
+# 此文件在 systemd 服务中通过 EnvironmentFile 加载
+# PUBLIC_BASE_URL=
+# JWT_SECRET=
+ENVEOF
+    echo "[OfficeEditor] 环境配置文件已创建"
+fi
+
+# 4. 重启连接器
+systemctl daemon-reload 2>/dev/null || true
 systemctl restart officeeditor-connector
 
-# 更新 Docker 镜像
-cd "${TRIM_APPDEST:-/var/apps/OfficeEditor/target}/docker"
-docker compose pull
-docker compose up -d
+# 5. 更新 Docker 镜像
+if [ -d "$TRIM_APPDEST/docker" ]; then
+  cd "$TRIM_APPDEST/docker"
+  docker compose pull 2>/dev/null || true
+  docker compose up -d 2>/dev/null || true
+fi
 
 echo "[OfficeEditor] 升级完成"
 exit 0
