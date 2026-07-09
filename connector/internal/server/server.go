@@ -173,21 +173,14 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// baseURL: OnlyOffice Document Server (Docker 内) 回调使用的地址
-	// 必须使用主机可达的地址，而不是浏览器侧的地址。
-	// 因此始终使用 cfg.BaseURL（配为 NAS 内网 IP），不由 overrideHost 覆盖。
+	// 文档下载/回调 URL 使用 cfg.BaseURL（NAS 内网 IP）
+	// 因为 OnlyOffice Document Server (Docker 内) 需要从服务器端调用这些地址
 	configJSON := buildEditorConfig(filePath, r, cfg, cfg.BaseURL)
 
-	// OnlyOffice API JS 使用 CGI 代理路径（浏览器同源加载）
-	// CGI 代理将 action=officeds 转发到 OnlyOffice Document Server (9080)
-	// 同时兼容连接器自带的 /officeds/ 代理（直接访问 10088 端口时）
-	cgiBase := r.URL.Query().Get("cgi_base")
-	apiJSBase := ""
-	if cgiBase != "" {
-		apiJSBase = cgiBase + "?action=officeds&path="
-	}
-	// 如果没有 CGI 代理（直接访问 10088），使用相对路径
-	// 连接器自身的 /officeds/ 代理会处理
+	// OnlyOffice API JS 始终通过连接器自身 /officeds/ 代理加载
+	// 连接器将 /officeds/ → OnlyOffice Document Server (9080)
+	// script 标签加载无跨域限制，浏览器从 cfg.BaseURL 加载
+	apiJSBase := cfg.BaseURL
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
@@ -664,7 +657,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.27
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.28
     </p>
   </div>
 </div>
@@ -787,7 +780,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.27"
+const AppVersion = "1.0.28"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release
