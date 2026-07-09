@@ -22,10 +22,10 @@ FNos 原生 Office 在线协作编辑器。基于 [OnlyOffice](https://www.onlyo
 
 ## 界面预览
 
-<p align="center">
-  <img src="docs/screenshot-1.png" width="45%" alt="首页界面">
-  <img src="docs/screenshot-2.png" width="45%" alt="编辑界面">
-</p>
+
+  <img src="docs/screenshot-1.png" alt="首页界面">
+  <img src="docs/screenshot-2.png" alt="编辑界面">
+
 
 ---
 
@@ -171,13 +171,13 @@ fnpack build --directory .
 
 ## 💰 赞助支持
 
-如果这个项目对你有帮助，欢迎扫码赞助！
+你的赞助是我更新的动力 💪
 
-<p align="center">
-  <img src="docs/donate-wechat.png" width="280" alt="微信赞助">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/donate-alipay.png" width="280" alt="支付宝赞助">
-</p>
+
+  <img src="docs/donate-wechat.png" alt="微信赞助">
+  
+  <img src="docs/donate-alipay.png" alt="支付宝赞助">
+
 
 > 赞助后将你的 GitHub ID 留言，我会添加到致谢名单 🙏
 
