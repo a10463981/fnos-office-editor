@@ -161,8 +161,12 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		http.Error(w, "missing path", http.StatusBadRequest)
 		return
 	}
-	if !isSafePath(filePath) {
+	if !isSafePath(filePath) || !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
 		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
+		http.Error(w, "access denied", http.StatusForbidden)
 		return
 	}
 
@@ -182,7 +186,11 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
-	if !isSafePath(filePath) {
+	if !isSafePath(filePath) || !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if !hasFileAccess(filePath, r.URL.Query().Get("user_id")) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -729,9 +737,16 @@ func corsHandler(next http.Handler) http.Handler {
 }
 
 func isSafePath(p string) bool {
-	if p == "" { return false }
-	if strings.Contains(p, "..") { return false }
+	if p == "" || strings.Contains(p, "..") { return false }
 	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
+}
+
+func hasFileAccess(filePath string, userId string) bool {
+	if userId == "" { return false }
+	parts := strings.Split(filePath, "/")
+	if len(parts) < 4 { return false }
+	// User can access: /vol{X}/{userId}/...
+	return strings.HasPrefix(filePath, "/vol/"+parts[2]+"/"+userId+"/") || filePath == "/vol/"+parts[2]+"/"+userId
 }
 
 func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
