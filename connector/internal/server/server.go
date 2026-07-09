@@ -35,14 +35,14 @@ type Config struct {
 func NewServer(cfg *Config) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok", "version": "1.0.0", "time": time.Now().Unix(),
 		})
 	})
 
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
@@ -55,41 +55,46 @@ func NewServer(cfg *Config) http.Handler {
 		handleHomePage(w, r, cfg)
 	})
 
-	mux.HandleFunc("GET /api/history", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
 		handleHistory(w, r, cfg)
 	})
-	mux.HandleFunc("POST /api/create", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/create", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDocument(w, r, cfg)
 	})
-	mux.HandleFunc("POST /api/fonts/refresh", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/fonts/refresh", func(w http.ResponseWriter, r *http.Request) {
 		handleFontRefresh(w)
 	})
-	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
-		handleGetConfig(w, cfg)
+	// /api/config handles both GET (read) and POST (save)
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetConfig(w, cfg)
+		case http.MethodPost:
+			handleSaveConfig(w, r, cfg)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
-	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
-		handleSaveConfig(w, r, cfg)
-	})
-	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w)
 	})
-	mux.HandleFunc("GET /api/check-update", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/check-update", func(w http.ResponseWriter, r *http.Request) {
 		handleCheckUpdate(w)
 	})
 
-	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
 	})
-	mux.HandleFunc("GET /api/download", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/download", func(w http.ResponseWriter, r *http.Request) {
 		handleDownload(w, r)
 	})
-	mux.HandleFunc("POST /api/callback", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/callback", func(w http.ResponseWriter, r *http.Request) {
 		handleCallback(w, r)
 	})
-	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
 	})
-	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
 			// Wrap mux with officeds proxy middleware (catches before routing)
@@ -650,7 +655,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.23
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.24
     </p>
   </div>
 </div>
@@ -773,7 +778,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.23"
+const AppVersion = "1.0.24"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release
