@@ -370,7 +370,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="http://localhost:10088/officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
