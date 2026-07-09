@@ -92,6 +92,9 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
+	mux.HandleFunc("GET /officeds/", func(w http.ResponseWriter, r *http.Request) {
+		handleOfficedsProxy(w, r)
+	})
 	return corsHandler(mux)
 }
 
@@ -359,7 +362,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="http://localhost:10088/officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -628,7 +631,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.13
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.14
     </p>
   </div>
 </div>
