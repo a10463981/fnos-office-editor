@@ -625,8 +625,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
     <h2>赞助支持</h2>
     <p style="font-size:13px;color:#666;margin-bottom:12px">你的赞助是我更新的动力 💪</p>
     <div>
-      <img id="wechatQr" style="width:160px;margin:0 8px" alt="微信赞助">
-      <img id="alipayQr" style="width:160px;margin:0 8px" alt="支付宝赞助">
+      <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
       GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.11
