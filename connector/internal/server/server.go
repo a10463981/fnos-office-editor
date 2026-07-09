@@ -359,7 +359,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="http://localhost:10088/officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -720,6 +720,18 @@ func corsHandler(next http.Handler) http.Handler {
 func isSafePath(p string) bool {
 	if p == "" || strings.Contains(p, "..") { return false }
 	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
+}
+
+func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
+	backend := "http://127.0.0.1:9080" + strings.TrimPrefix(r.URL.Path, "/officeds")
+	if r.URL.RawQuery != "" { backend += "?" + r.URL.RawQuery }
+	resp, err := http.Get(backend)
+	if err != nil { http.Error(w, "proxy error", 502); return }
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func base64URLEncode(data []byte) string {
