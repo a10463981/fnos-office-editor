@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -183,10 +184,14 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	dockerURL := "http://host.docker.internal:10088"
 	configJSON := buildEditorConfig(filePath, r, cfg, dockerURL)
 
-	// OnlyOffice API JS 始终通过连接器自身 /officeds/ 代理加载
-	// 连接器将 /officeds/ → OnlyOffice Document Server (9080)
-	// script 标签加载无跨域限制，浏览器从 cfg.BaseURL 加载
+	// OnlyOffice API JS 通过 CGI 代理路径（浏览器同源加载）
+	// CGI 代理将 action=officeds 转发到 OnlyOffice Document Server (9080)
+	// 同时兼容连接器自带的 /officeds/ 代理（直接访问 10088 端口时）
+	cgiBase := r.URL.Query().Get("cgi_base")
 	apiJSBase := cfg.BaseURL
+	if cgiBase != "" {
+		apiJSBase = cgiBase + "?action=officeds&path="
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
@@ -663,7 +668,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.29
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.30
     </p>
   </div>
 </div>
@@ -758,18 +763,19 @@ func isSafePath(p string) bool {
 }
 
 func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
-	backend := "http://127.0.0.1:9080" + strings.TrimPrefix(r.URL.Path, "/officeds")
-	if r.URL.RawQuery != "" { backend += "?" + r.URL.RawQuery }
-	// Forward the request with the original method
-	req, err := http.NewRequest(r.Method, backend, r.Body)
-	if err != nil { http.Error(w, "proxy error", 502); return }
-	req.Header = r.Header
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil { http.Error(w, "proxy error", 502); return }
-	defer resp.Body.Close()
-	for k, v := range resp.Header { w.Header()[k] = v }
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	// Use ReverseProxy which supports HTTP Upgrade (WebSocket)
+	backendPath := strings.TrimPrefix(r.URL.Path, "/officeds")
+	target := &url.URL{Scheme: "http", Host: "127.0.0.1:9080"}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		return nil
+	}
+	// Rewrite the request path
+	r.URL.Path = backendPath
+	r.URL.Host = target.Host
+	r.URL.Scheme = target.Scheme
+	r.Host = target.Host
+	proxy.ServeHTTP(w, r)
 }
 
 func base64URLEncode(data []byte) string {
@@ -786,7 +792,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.29"
+const AppVersion = "1.0.31"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release

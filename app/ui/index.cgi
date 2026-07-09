@@ -35,7 +35,7 @@ if action == 'officeds':
 # ---- 通用 API 代理 ----
 if action == 'api':
     api_path = params.get('path', [''])[0]
-    if not api_path.startswith('/api/'):
+    if not (api_path.startswith('/api/') or api_path.startswith('/sponsor/')):
         print('Content-Type: application/json')
         print('Status: 400\n')
         print('{"error":"invalid path"}')
@@ -69,7 +69,7 @@ if action == 'create':
 # ---- 编辑器页面 ----
 if file_path:
     encoded = urllib.parse.quote(file_path)
-    editor_url = f'{connector_base}/editor?path={encoded}'
+    editor_url = f'{connector_base}/editor?path={encoded}&cgi_base={urllib.parse.quote(cgi_self, safe="")}'
     if user_id: editor_url += f'&user_id={urllib.parse.quote(user_id)}'
     if user_name: editor_url += f'&user_name={urllib.parse.quote(user_name)}'
     result = subprocess.run(['curl','-s',editor_url], capture_output=True, text=True, timeout=10)
@@ -77,13 +77,20 @@ if file_path:
         print('Content-Type: text/html; charset=utf-8\n')
         print('<html><body><h1>错误</h1><p>无法连接到编辑器服务</p></body></html>')
     else:
-        # api.js 通过连接器自身 /officeds/ 代理加载（端口 10088）
-        # script 标签不受 CORS 限制，可以跨端口加载
-        # 连接器运行在同一台机器上，能把 /officeds/ 代理到 OnlyOffice (9080)
+        # 将 api.js URL 替换为 CGI 同源代理路径（避免跨端口加载问题）
+        # 浏览器通过 CGI 加载 /cgi/.../?action=officeds&path=/officeds/...
+        # CGI 内部转发到 OnlyOffice Document Server (9080)
         html = result.stdout
-        old_api_js = 'src="/officeds/'
-        new_api_js = f'src="http://{request_host}:10088/officeds/'
-        html = html.replace(old_api_js, new_api_js)
+        # 处理两种可能: 旧版 /officeds/ 或新版 http://IP:10088/officeds/
+        cgi_api_url = f'{cgi_self}?action=officeds&path='
+        old_patterns = [
+            'src="/officeds/',
+            f'src="http://{request_host}:10088/officeds/',
+        ]
+        for pattern in old_patterns:
+            if pattern in html:
+                html = html.replace(pattern, f'src="{cgi_api_url}')
+                break
         print('Content-Type: text/html; charset=utf-8\n')
         print(html)
     sys.exit(0)
