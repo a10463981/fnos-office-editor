@@ -178,11 +178,20 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	// 因此始终使用 cfg.BaseURL（配为 NAS 内网 IP），不由 overrideHost 覆盖。
 	configJSON := buildEditorConfig(filePath, r, cfg, cfg.BaseURL)
 
-	// OnlyOffice API JS 使用绝对路径（通过 nginx 或连接器自身的 /officeds/ 代理）
-	// 浏览器从同源加载，适用于 fnconnect/公网/内网 所有场景
+	// OnlyOffice API JS 使用 CGI 代理路径（浏览器同源加载）
+	// CGI 代理将 action=officeds 转发到 OnlyOffice Document Server (9080)
+	// 同时兼容连接器自带的 /officeds/ 代理（直接访问 10088 端口时）
+	cgiBase := r.URL.Query().Get("cgi_base")
+	apiJSBase := ""
+	if cgiBase != "" {
+		apiJSBase = cgiBase + "?action=officeds&path="
+	}
+	// 如果没有 CGI 代理（直接访问 10088），使用相对路径
+	// 连接器自身的 /officeds/ 代理会处理
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
-	html := strings.Replace(editorPageHTML, "__API_JS_BASE__", "", 1)
+	html := strings.Replace(editorPageHTML, "__API_JS_BASE__", apiJSBase, 1)
 	fmt.Fprintf(w, html, configJSON)
 }
 

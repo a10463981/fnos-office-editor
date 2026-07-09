@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, urllib.parse, subprocess, re, sys, json
+import os, urllib.parse, subprocess, sys
 
 qs = os.environ.get('QUERY_STRING', '')
 params = urllib.parse.parse_qs(qs)
@@ -11,95 +11,77 @@ user_name = os.environ.get('HTTP_X_TRIM_USERNAME', '')
 user_dir  = f'/vol1/{user_id}' if user_id and user_id != 'anonymous' else '/vol1/1000'
 is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
 
-connector_base = f'http://127.0.0.1:10088'
+connector_base = 'http://127.0.0.1:10088'
+cgi_self = '/cgi/ThirdParty/OfficeEditor/index.cgi'
 
-# ---- 通用 API 代理：所有 /api/* 请求通过 CGI 内部转发 ----
-# 前端 JS 调用 fetch(apiBase + "/api/history?...")
-# 实际发起的请求是 fetch("/cgi/.../index.cgi?action=api&path=/api/history&...")
+# ---- OnlyOffice JS/CSS 代理（通过 CGI URL 加载）----
+if action == 'officeds':
+    raw_path = params.get('path', [''])[0]
+    if '/officeds/' in raw_path:
+        backend_path = raw_path.split('/officeds/', 1)[1]
+    else:
+        backend_path = raw_path.lstrip('/')
+    result = subprocess.run(['curl', '-s', f'http://127.0.0.1:9080/{backend_path}'], capture_output=True, timeout=30)
+    ct = 'application/octet-stream'
+    if backend_path.endswith('.js'):    ct = 'application/javascript'
+    elif backend_path.endswith('.css'): ct = 'text/css'
+    elif backend_path.endswith('.wasm'): ct = 'application/wasm'
+    print(f'Content-Type: {ct}')
+    print()
+    sys.stdout.buffer.write(result.stdout)
+    sys.exit(0)
+
+# ---- 通用 API 代理 ----
 if action == 'api':
     api_path = params.get('path', [''])[0]
     if not api_path.startswith('/api/'):
-        print('Status: 400')
-        print('Content-Type: application/json\n')
+        print('Content-Type: application/json')
+        print('Status: 400\n')
         print('{"error":"invalid path"}')
         sys.exit(0)
-
-    # 转发 HTTP 方法（保留 POST body）
     method = os.environ.get('REQUEST_METHOD', 'GET').upper()
     body_bytes = b''
-    content_length = os.environ.get('CONTENT_LENGTH', '0')
-    if content_length and content_length.isdigit() and int(content_length) > 0:
-        body_bytes = sys.stdin.buffer.read(int(content_length))
-
-    # 重建 query string（去掉 action 和 path 参数，保留其余参数）
+    cl = os.environ.get('CONTENT_LENGTH', '0')
+    if cl and cl.isdigit() and int(cl) > 0:
+        body_bytes = sys.stdin.buffer.read(int(cl))
     orig_qs = os.environ.get('QUERY_STRING', '')
-    new_qs = []
-    for part in orig_qs.split('&'):
-        if part.startswith('action=') or part.startswith('path='):
-            continue
-        new_qs.append(part)
-    qs_suffix = ('?' + '&'.join(new_qs)) if new_qs else ''
-
-    url = f'{connector_base}{api_path}{qs_suffix}'
-
-    # 根据方法使用 curl 或 urllib
+    new_qs = [p for p in orig_qs.split('&') if not p.startswith('action=') and not p.startswith('path=')]
+    qs_sfx = ('?' + '&'.join(new_qs)) if new_qs else ''
+    url = f'{connector_base}{api_path}{qs_sfx}'
     result = subprocess.run(['curl', '-s', '-X', method, '--data-binary', '@-', url],
                           input=body_bytes, capture_output=True, timeout=30)
-
-    ct = result.stdout
-    if not ct:
-        ct = b'null'
     print('Content-Type: application/json')
     print()
-    sys.stdout.buffer.write(ct)
-    sys.exit(0)
-
-# ---- 代理 OnlyOffice JS/CSS ----
-if '/officeds/' in os.environ.get('REQUEST_URI', ''):
-    target = os.environ.get('REQUEST_URI', '')
-    idx = target.find('/officeds/')
-    backend_path = target[idx + len('/officeds/'):]
-    result = subprocess.run(['curl', '-s', f'http://127.0.0.1:9080/{backend_path}'], capture_output=True)
-    if result.returncode == 0:
-        ct = 'application/javascript' if backend_path.endswith('.js') else 'text/css' if backend_path.endswith('.css') else 'application/octet-stream'
-        print(f'Content-Type: {ct}')
-        print()
-        sys.stdout.buffer.write(result.stdout)
-    else:
-        print('Status: 404')
-        print()
+    sys.stdout.buffer.write(result.stdout if result.stdout else b'null')
     sys.exit(0)
 
 # ---- 新建文档 ----
 if action == 'create':
     doc_type = params.get('type', ['docx'])[0]
-    result = subprocess.run(['curl','-s','-X','POST',f'{connector_base}/api/create?type={doc_type}&dir={urllib.parse.quote(user_dir)}'], capture_output=True, text=True, timeout=10)
-    try: data = json.loads(result.stdout.strip()); new_path = data.get('path', result.stdout.strip())
-    except: new_path = result.stdout.strip()
-    print(f'Location: /cgi/ThirdParty/OfficeEditor/index.cgi?path={urllib.parse.quote(new_path)}')
+    r = subprocess.run(['curl','-s','-X','POST',f'{connector_base}/api/create?type={doc_type}&dir={urllib.parse.quote(user_dir)}'], capture_output=True, text=True, timeout=10)
+    try: d = json.loads(r.stdout.strip()); np = d.get('path', r.stdout.strip())
+    except: np = r.stdout.strip()
+    print(f'Location: /cgi/ThirdParty/OfficeEditor/index.cgi?path={urllib.parse.quote(np)}')
     print('Status: 302\n')
     sys.exit(0)
 
 # ---- 编辑器页面 ----
 if file_path:
     encoded = urllib.parse.quote(file_path)
-    editor_url = f'{connector_base}/editor?path={encoded}'
+    editor_url = f'{connector_base}/editor?path={encoded}&cgi_base={urllib.parse.quote(cgi_self, safe="")}'
     if user_id: editor_url += f'&user_id={urllib.parse.quote(user_id)}'
     if user_name: editor_url += f'&user_name={urllib.parse.quote(user_name)}'
     result = subprocess.run(['curl','-s',editor_url], capture_output=True, text=True, timeout=10)
-    html = result.stdout
-    if result.returncode != 0 or not html.strip():
+    if result.returncode != 0 or not result.stdout.strip():
         print('Content-Type: text/html; charset=utf-8\n')
         print('<html><body><h1>错误</h1><p>无法连接到编辑器服务</p></body></html>')
     else:
         print('Content-Type: text/html; charset=utf-8\n')
-        print(html)
+        print(result.stdout)
     sys.exit(0)
 
-# ---- 首页（通过 action=api 代理方式）----
-cgi_self = '/cgi/ThirdParty/OfficeEditor/index.cgi'
+# ---- 首页 ----
 api_base = f'{cgi_self}?action=api&path='
-
 result = subprocess.run(['curl','-s',f'{connector_base}/?api_base={urllib.parse.quote(api_base, safe="")}&dir={urllib.parse.quote(user_dir)}&user_name={urllib.parse.quote(user_name)}&user_id={user_id}&is_admin={is_admin}'], capture_output=True, text=True, timeout=10)
 print('Content-Type: text/html; charset=utf-8\n')
 print(result.stdout)
