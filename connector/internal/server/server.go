@@ -179,8 +179,8 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		http.Error(w, "missing path", http.StatusBadRequest)
+	if !isSafePath(filePath) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	http.ServeFile(w, r, filePath)
@@ -188,7 +188,11 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 func handleCallback(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
-	if filePath == "" || !isSafePath(filePath) {
+	if filePath == "" {
+		json.NewEncoder(w).Encode(map[string]int{"error": 1})
+		return
+	}
+	if !isSafePath(filePath) {
 		json.NewEncoder(w).Encode(map[string]int{"error": 1})
 		return
 	}
@@ -363,7 +367,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="http://127.0.0.1:9080/web-apps/apps/api/documents/api.js"></script>
+<script src="/officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -547,15 +551,15 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	userName := r.URL.Query().Get("user_name")
 	if userName == "" { userName = "FNos 用户" }
 	apiBase := r.URL.Query().Get("api_base")
+    userId := r.URL.Query().Get("user_id"); if userId == "" { userId = "1000" }
 	if apiBase == "" { apiBase = "http://localhost:10088" }
-	userId := r.URL.Query().Get("user_id")
-	if userId == "" { userId = "1000" }
 	isAdmin := r.URL.Query().Get("is_admin")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
 	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
 	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
+    html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
 	if isAdmin == "true" {
 		html = strings.Replace(html, "IS_ADMIN_PLACEHOLDER", "", 1)
 	} else {
@@ -654,6 +658,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 var userDir="USER_DIR_PLACEHOLDER";
 var userId="USER_ID_PLACEHOLDER";
 var apiBase="API_BASE_PLACEHOLDER";
+    html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 function createDoc(type){
   var btn=event.target;
@@ -722,7 +727,8 @@ func corsHandler(next http.Handler) http.Handler {
 }
 
 func isSafePath(p string) bool {
-	if p == "" || strings.Contains(p, "..") { return false }
+	if p == "" { return false }
+	if strings.Contains(p, "..") { return false }
 	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
 }
 

@@ -12,6 +12,22 @@ user_dir  = f'/vol1/{user_id}' if user_id else '/vol1/1000'
 
 referer = os.environ.get('HTTP_REFERER', '')
 fnos_host = '127.0.0.1'
+
+# ---- 代理 OnlyOffice JS/CSS (支持 FN Connect 远程) ----
+if '/officeds/' in os.environ.get('REQUEST_URI', ''):
+    target = os.environ.get('REQUEST_URI', '')
+    idx = target.find('/officeds/')
+    backend_path = target[idx + len('/officeds/'):]
+    result = subprocess.run(['curl', '-s', f'http://127.0.0.1:9080/{backend_path}'], capture_output=True)
+    if result.returncode == 0:
+        ct = 'application/javascript' if backend_path.endswith('.js') else 'text/css' if backend_path.endswith('.css') else 'application/octet-stream'
+        print(f'Content-Type: {ct}')
+        print()
+        sys.stdout.buffer.write(result.stdout)
+    else:
+        print('Status: 404')
+        print()
+    sys.exit(0)
 m = re.search(r'https?://([^/:]+)', referer)
 if m: fnos_host = m.group(1)
 connector_base = f'http://127.0.0.1:10088'
