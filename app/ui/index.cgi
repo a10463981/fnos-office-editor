@@ -13,6 +13,7 @@ is_admin = os.environ.get('HTTP_X_TRIM_ISADMIN', 'false')
 
 connector_base = 'http://127.0.0.1:10088'
 cgi_self = '/cgi/ThirdParty/OfficeEditor/index.cgi'
+request_host = os.environ.get('HTTP_HOST', '127.0.0.1').split(':')[0]
 
 # ---- OnlyOffice JS/CSS 代理（通过 CGI URL 加载）----
 if action == 'officeds':
@@ -68,7 +69,7 @@ if action == 'create':
 # ---- 编辑器页面 ----
 if file_path:
     encoded = urllib.parse.quote(file_path)
-    editor_url = f'{connector_base}/editor?path={encoded}&cgi_base={urllib.parse.quote(cgi_self, safe="")}'
+    editor_url = f'{connector_base}/editor?path={encoded}'
     if user_id: editor_url += f'&user_id={urllib.parse.quote(user_id)}'
     if user_name: editor_url += f'&user_name={urllib.parse.quote(user_name)}'
     result = subprocess.run(['curl','-s',editor_url], capture_output=True, text=True, timeout=10)
@@ -76,8 +77,15 @@ if file_path:
         print('Content-Type: text/html; charset=utf-8\n')
         print('<html><body><h1>错误</h1><p>无法连接到编辑器服务</p></body></html>')
     else:
+        # api.js 通过连接器自身 /officeds/ 代理加载（端口 10088）
+        # script 标签不受 CORS 限制，可以跨端口加载
+        # 连接器运行在同一台机器上，能把 /officeds/ 代理到 OnlyOffice (9080)
+        html = result.stdout
+        old_api_js = 'src="/officeds/'
+        new_api_js = f'src="http://{request_host}:10088/officeds/'
+        html = html.replace(old_api_js, new_api_js)
         print('Content-Type: text/html; charset=utf-8\n')
-        print(result.stdout)
+        print(html)
     sys.exit(0)
 
 # ---- 首页 ----
