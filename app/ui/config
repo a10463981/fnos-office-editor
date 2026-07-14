@@ -1,7 +1,7 @@
 {
   ".url": {
-    "FNOSOfficeSuite.Desktop": {
-      "title": "FNOS Office Suite",
+    "OfficeEditor.Desktop": {
+      "title": "office 协作",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
       "protocol": "",
