@@ -46,6 +46,13 @@ func New(cfg *config.Config) *Mux {
 		mux:       http.NewServeMux(),
 	}
 	rt.register()
+	log.Printf("REGISTERED ROUTES:")
+	log.Printf("  /api/*        → System API")
+	log.Printf("  /officeds/*   → OnlyOffice Proxy")
+	log.Printf("  /cache/*      → DocServer Cache")
+	log.Printf("  /officeeditor-api/* → FNOS Prefix (stripped)")
+	log.Printf("  /editor       → Editor Page")
+	log.Printf("  /             → SPA Fallback")
 	return rt
 }
 
@@ -53,7 +60,7 @@ func New(cfg *config.Config) *Mux {
 func (rt *Mux) Handler() http.Handler {
 	// 中间件链: CORS → 日志 → 前缀剥离 → 代理检查 → 路由
 	return middleware.CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("request: %s %s (from %s)", r.Method, r.URL.Path, r.RemoteAddr)
+		log.Printf("REQUEST: %s %s?%s (from %s, host=%s)", r.Method, r.URL.Path, r.URL.RawQuery, r.RemoteAddr, r.Host)
 
 		// 1. OnlyOffice 代理优先
 		if rt.ooGateway.ShouldHandle(r.URL.Path) {
