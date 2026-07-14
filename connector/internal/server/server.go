@@ -210,7 +210,7 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	// 使用相对路径，由 fnOS nginx 代理转发（端口路由时浏览器从 fnOS 代理路径加载）
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
+	addToHistory(cfg, filePath, getUserID(r))
 	fmt.Fprintf(w, editorPageHTML, configJSON)
 }
 
@@ -516,7 +516,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	}
 	f.Close()
 
-	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
+	addToHistory(cfg, filePath, getUserID(r))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": filePath, "name": name})
@@ -596,14 +596,16 @@ func saveAppConfig(cfg *Config, c *AppConfig) {
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	dir := r.URL.Query().Get("dir")
 	if dir == "" { dir = "/vol1/1000" }
-	userName := r.URL.Query().Get("user_name")
+	// 端口路由下 fnOS nginx 通过 X-Auth-* 头透传用户身份，优先使用
+	userName := r.Header.Get("X-Auth-Username")
+	if userName == "" { userName = r.URL.Query().Get("user_name") }
 	if userName == "" { userName = "FNos 用户" }
 	apiBase := r.URL.Query().Get("api_base")
 	// 端口路由下，前端必须使用相对路径，由 fnOS nginx 代理转发
-	// 硬编码 localhost:10088 会导致浏览器端无法访问（用户本机 ≠ 服务器）
 	if apiBase == "" { apiBase = "" }
-	userId := r.URL.Query().Get("user_id")
-	if userId == "" { userId = "anonymous" }
+	userId := r.Header.Get("X-Auth-UID")
+	if userId == "" { userId = r.URL.Query().Get("user_id") }
+	// userId 留空由 historyFilePath() 统一处理为 "shared"
 	isAdmin := r.URL.Query().Get("is_admin")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -713,7 +715,7 @@ function createDoc(type){
   var btn=event.target;
   btn.disabled=true;
   btn.innerHTML=btn.innerHTML.replace(/<span>.*<\/span>/,'<span class="spinner"></span>');
-  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir),{method:"POST"})
+  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId),{method:"POST"})
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
