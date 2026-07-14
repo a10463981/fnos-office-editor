@@ -112,8 +112,13 @@ func NewServer(cfg *Config) http.Handler {
 
 	return corsHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/officeds/") {
-			// 剥离前缀，把 /officeds/xxx → /xxx，然后由 ReverseProxy 转发到 DocServer
+			// /officeds/ → 剥离前缀后转发到 DocServer（JS/CSS 静态资源）
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/officeds")
+			ooProxy.ServeHTTP(w, r)
+			return
+		}
+		// /cache/ → DocServer 运行时生成的缓存资源路径（Editor.bin 等），直接代理
+		if strings.HasPrefix(r.URL.Path, "/cache/") {
 			ooProxy.ServeHTTP(w, r)
 			return
 		}
