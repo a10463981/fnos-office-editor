@@ -1,5 +1,5 @@
 appname="OfficeEditor"
-version="1.0.31"
+version="1.0.13"
 display_name="office 协作"
 desc="office 协作 — 基于 OnlyOffice 的 FNos 在线文档编辑器。支持 Word/Excel/PPT 在线编辑、多人协作、用户身份识别、自定义字体。双击或右键 Office 文件即可编辑。GitHub: github.com/a10463981/fnos-office-editor"
 maintainer="OnlyOffice"
@@ -8,7 +8,7 @@ maintainer_url="https://github.com/a10463981/fnos-office-editor"
 source="thirdparty"
 platform="all"
 min_version="0.8.28"
-change_log="v1.0.31: 修复 WebSocket 502（改为 httputil.ReverseProxy 原生支持 WebSocket 升级）；修复赞助码图片 400 错误（CGI 允许 /sponsor/ 路径）"
+change_log="v1.0.13: /app/ui config 简化为端口路由，由 FNos 自动代理"
 port=10088
 desktop_uidir=ui
 desktop_applaunchname=OfficeEditor.Desktop

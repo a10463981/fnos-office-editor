@@ -98,14 +98,13 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("/sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
-			// Wrap mux with officeds proxy middleware (catches before routing)
-	return corsHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/officeds/") {
-			handleOfficedsProxy(w, r)
-			return
-		}
-		mux.ServeHTTP(w, r)
-	}))
+
+	// 代理 OnlyOffice JS/CSS（直连模式时用户浏览器不走 127.0.0.1:9080）
+	ooURL, _ := url.Parse(cfg.DocServerURL)
+	ooProxy := httputil.NewSingleHostReverseProxy(ooURL)
+	mux.Handle("GET /officeds/", http.StripPrefix("/officeds", ooProxy))
+
+	return corsHandler(mux)
 }
 
 func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
@@ -399,7 +398,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="__API_JS_BASE__/officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -668,7 +667,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.30
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.13
     </p>
   </div>
 </div>
@@ -792,7 +791,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.31"
+const AppVersion = "1.0.13"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release
