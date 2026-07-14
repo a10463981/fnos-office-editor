@@ -22,12 +22,12 @@ tar czf "$BUILD_DIR/app.tgz" \
     docker/docker-compose.yaml \
     templates/new.pptx \
     ui/config \
+    ui/index.cgi \
     ui/images/icon_256.png \
     ui/images/icon_64.png \
     ui/images/donate.png \
     ui/images/donate-alipay.png \
     ui/images/donate-wechat.png \
-    ui/index.cgi \
     www/index.html
 cd "$PROJECT_DIR"
 

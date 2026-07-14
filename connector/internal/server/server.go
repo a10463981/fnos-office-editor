@@ -4,10 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -17,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -99,13 +103,14 @@ func NewServer(cfg *Config) http.Handler {
 		handleSponsorImage(w, r)
 	})
 			// Wrap mux with officeds proxy middleware (catches before routing)
-	return corsHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	chain := corsHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/officeds/") {
 			handleOfficedsProxy(w, r)
 			return
 		}
 		mux.ServeHTTP(w, r)
 	}))
+	return withRecover(requestLogMiddleware(guestCookieMiddleware(chain)))
 }
 
 func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
@@ -131,8 +136,14 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 	mode := r.URL.Query().Get("mode")
 	canEdit := editable(ext) && mode != "view"
-	userID := getUserID(r)
-	userName := getUserName(r)
+	userID := getEffectiveUserID(r)
+	if userID == "" {
+		userID = "fnos_user"
+	}
+	userName := getEffectiveUserName(r)
+	if userName == "" || userName == "guest" {
+		userName = "FNos 用户"
+	}
 
 	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
 	h := sha256.Sum256([]byte(keyData))
@@ -173,9 +184,42 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 }
 
 func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
+	// 双保险：editor handler 整体 defer recover，绝不让任何 panic 击穿连接。
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("EDITOR PANIC method=%s path=%s query_path=%q uid=%q err=%v\n%s",
+				r.Method, r.URL.Path, r.URL.Query().Get("path"),
+				getEffectiveUserID(r), rec, debug.Stack())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, `{"error":"editor internal error","detail":%q}`, fmt.Sprint(rec))
+		}
+	}()
+
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" || !isSafePath(filePath) {
+		log.Printf("EDITOR REJECT path=%q remote=%s reason=unsafe_or_empty", filePath, r.RemoteAddr)
 		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	// 调试日志：进 editorHandler 必打，方便排查 CGI → Connector 的身份链路
+	log.Printf("=== EDITOR REQUEST === method=%s path=%s query_path=%q X-Trim-UserID=%q X-Trim-Username=%q X-FNOS-UserID=%q X-FNOS-Username=%q cookie=%q cgi_base=%q",
+		r.Method, r.URL.Path, filePath,
+		r.Header.Get("X-Trim-UserID"),
+		r.Header.Get("X-Trim-Username"),
+		r.Header.Get("X-FNOS-UserID"),
+		r.Header.Get("X-FNOS-Username"),
+		r.Header.Get("Cookie"),
+		r.URL.Query().Get("cgi_base"),
+	)
+
+	// 文件不存在直接返回 404 HTML，绝不允许走 panic 路径让连接被关掉
+	if _, statErr := os.Stat(filePath); statErr != nil {
+		log.Printf("EDITOR 404 path=%q err=%v", filePath, statErr)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:24px"><h2>文件不存在</h2><p>路径：<code>%s</code></p><p>错误：%v</p><p><a href="javascript:history.back()">返回</a></p></body></html>`, html.EscapeString(filePath), statErr)
 		return
 	}
 
@@ -194,7 +238,12 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
+	// 同一 user_id 共享历史：优先 header / cookie，回退到 query
+	histUid := getEffectiveUserID(r)
+	if histUid == "" {
+		histUid = r.URL.Query().Get("user_id")
+	}
+	addToHistory(cfg, filePath, histUid)
 	html := strings.Replace(editorPageHTML, "__API_JS_BASE__", apiJSBase, 1)
 	fmt.Fprintf(w, html, configJSON)
 }
@@ -284,33 +333,74 @@ func getHostOverride(r *http.Request) string {
 	return ""
 }
 
-func getUserID(r *http.Request) string {
-	if uid := r.Header.Get("X-Auth-UID"); uid != "" {
-		return uid
+// getEffectiveUserID 按固定优先级读取用户 ID：
+//  1. X-Trim-UserID 头（CGI / FNOS Gateway 透传）
+//  2. X-FNOS-UserID 头（备选）
+//  3. office_guest_id cookie（直连场景下由 guestCookieMiddleware 注入）
+//  4. 查询参数 user_id（CGI 当前链路使用）
+// 禁止任何 IP / 127.0.0.1 fallback，避免 FNOS Gateway 反代后多用户身份串号。
+func getEffectiveUserID(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Trim-UserID")); v != "" {
+		return v
 	}
-	return r.URL.Query().Get("user_id")
+	if v := strings.TrimSpace(r.Header.Get("X-FNOS-UserID")); v != "" {
+		return v
+	}
+	if c, err := r.Cookie("office_guest_id"); err == nil {
+		if v := strings.TrimSpace(c.Value); v != "" {
+			return v
+		}
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("user_id")); v != "" {
+		return v
+	}
+	return ""
 }
 
-func getUserName(r *http.Request) string {
-	if n := r.Header.Get("X-Auth-Username"); n != "" {
-		return n
+// getEffectiveUserName 同上优先级，读不到时回退 "guest"（不再用 "FNos 用户" 这种共享身份）。
+func getEffectiveUserName(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Trim-Username")); v != "" {
+		return v
 	}
-	return r.URL.Query().Get("user_name")
+	if v := strings.TrimSpace(r.Header.Get("X-FNOS-Username")); v != "" {
+		return v
+	}
+	if c, err := r.Cookie("office_guest_id"); err == nil {
+		if v := strings.TrimSpace(c.Value); v != "" {
+			return v
+		}
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("user_name")); v != "" {
+		return v
+	}
+	return "guest"
 }
 
 func buildEditorConfig(filePath string, r *http.Request, cfg *Config, baseURL string) string {
-	info, _ := os.Stat(filePath)
+	// 必须显式处理 os.Stat 错误，否则文件不存在时会因 info==nil 触发 runtime panic，
+	// 整个连接被关闭，浏览器看到 "Empty reply from server"。
+	info, err := os.Stat(filePath)
+	var modNs int64
+	var fileName string
+	if err != nil || info == nil {
+		modNs = time.Now().UnixNano()
+		fileName = filepath.Base(filePath)
+		log.Printf("EDITOR WARN: file not accessible path=%q err=%v (using fallback timestamp)", filePath, err)
+	} else {
+		modNs = info.ModTime().UnixNano()
+		fileName = info.Name()
+	}
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	keyData := fmt.Sprintf("%s|%d", filePath, info.ModTime().UnixNano())
+	keyData := fmt.Sprintf("%s|%d", filePath, modNs)
 	h := sha256.Sum256([]byte(keyData))
 	docKey := fmt.Sprintf("%x", h)[:20]
 
-	userID := getUserID(r)
+	userID := getEffectiveUserID(r)
 	if userID == "" {
 		userID = "fnos_user"
 	}
-	userName := getUserName(r)
-	if userName == "" {
+	userName := getEffectiveUserName(r)
+	if userName == "" || userName == "guest" {
 		userName = "FNos 用户"
 	}
 
@@ -318,7 +408,7 @@ func buildEditorConfig(filePath string, r *http.Request, cfg *Config, baseURL st
 		"document": map[string]interface{}{
 			"fileType": ext,
 			"key":      docKey,
-			"title":    info.Name(),
+			"title":    fileName,
 			"url":      fmt.Sprintf("%s/api/download?path=%s", baseURL, url.QueryEscape(filePath)),
 			"permissions": map[string]interface{}{
 				"edit": editable(ext), "download": true, "print": true,
@@ -461,17 +551,37 @@ func addToHistory(cfg *Config, filePath string, userId string) {
 }
 
 func handleHistory(w http.ResponseWriter, r *http.Request, cfg *Config) {
-	userId := r.URL.Query().Get("user_id")
+	// 身份优先级：header > cookie > query。避免 IP fallback 串号。
+	userId := getEffectiveUserID(r)
+	if userId == "" {
+		userId = r.URL.Query().Get("user_id")
+	}
+	if userId == "" {
+		userId = "anonymous"
+	}
 	entries := loadHistory(cfg, userId)
-	if entries == nil { entries = []HistoryEntry{} }
+	if entries == nil {
+		entries = []HistoryEntry{}
+	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(entries)
 }
 
 func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	docType := r.URL.Query().Get("type")
+	// 默认写到当前用户的 /vol1/<uid>/ 目录，多用户隔离
+	histUid := getEffectiveUserID(r)
+	if histUid == "" {
+		histUid = r.URL.Query().Get("user_id")
+	}
+	if histUid == "" {
+		histUid = "anonymous"
+	}
 	dir := r.URL.Query().Get("dir")
-	if dir == "" { dir = "/vol1/1000" }
+	if dir == "" {
+		dir = "/vol1/" + histUid
+	}
 
 	ext := map[string]string{"docx": "docx", "xlsx": "xlsx", "pptx": "pptx"}[docType]
 	if ext == "" {
@@ -500,7 +610,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	}
 	f.Close()
 
-	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
+	addToHistory(cfg, filePath, histUid)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": filePath, "name": name})
@@ -578,15 +688,31 @@ func saveAppConfig(cfg *Config, c *AppConfig) {
 }
 
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
+	// 身份参数优先级：header (CGI 透传) > query > cookie > 默认值
+	// 避免 FNOS Gateway 反代场景下 IP 串号导致用户历史混乱。
+	userId := getEffectiveUserID(r)
+	if userId == "" {
+		userId = "anonymous"
+	}
+	userName := getEffectiveUserName(r)
+	if userName == "" || userName == "guest" {
+		userName = "FNos 用户"
+	}
+	// dir / is_admin 仍走 query（CGI 单次透传，不会被多个用户共用）
 	dir := r.URL.Query().Get("dir")
-	if dir == "" { dir = "/vol1/1000" }
-	userName := r.URL.Query().Get("user_name")
-	if userName == "" { userName = "FNos 用户" }
-	apiBase := r.URL.Query().Get("api_base")
-	if apiBase == "" { apiBase = "http://localhost:10088" }
-	userId := r.URL.Query().Get("user_id")
-	if userId == "" { userId = "anonymous" }
+	if dir == "" {
+		dir = "/vol1/" + userId
+	}
 	isAdmin := r.URL.Query().Get("is_admin")
+	// api_base 默认用当前 request 推断（同源 CGI：/cgi/ThirdParty/.../?action=api&path=）
+	apiBase := r.URL.Query().Get("api_base")
+	if apiBase == "" {
+		apiBase = r.URL.Query().Get("apiBase")
+	}
+	if apiBase == "" {
+		apiBase = fmt.Sprintf("http://%s", r.Host)
+	}
+	log.Printf("HOME uid=%q username=%q dir=%q apiBase=%q isAdmin=%q", userId, userName, dir, apiBase, isAdmin)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
@@ -668,7 +794,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <img id="sponsorQr" src="" data-src="sponsor/donate" style="width:280px" alt="赞助码">
     </div>
     <p style="font-size:11px;color:#999;margin-top:12px">
-      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.30
+      GitHub: <a href="https://github.com/a10463981/fnos-office-editor" target="_blank">a10463981/fnos-office-editor</a> - v1.0.33
     </p>
   </div>
 </div>
@@ -744,6 +870,63 @@ loadHistory();
 </script>
 </body></html>`
 
+// ========== middleware ==========
+
+// withRecover 把任何 handler 的 panic 转成 500 JSON 响应，避免 "Empty reply from server"。
+func withRecover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("PANIC %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, `{"error":"internal server error","detail":%q}`, fmt.Sprint(rec))
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requestLogMiddleware 打印 method/path/query/关键 header/cookie，便于排查身份传递问题。
+func requestLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("REQ method=%s path=%s query_path=%q X-Trim-UserID=%q X-Trim-Username=%q X-FNOS-UserID=%q X-FNOS-Username=%q cookie=%q ua=%q",
+			r.Method,
+			r.URL.Path,
+			r.URL.Query().Get("path"),
+			r.Header.Get("X-Trim-UserID"),
+			r.Header.Get("X-Trim-Username"),
+			r.Header.Get("X-FNOS-UserID"),
+			r.Header.Get("X-FNOS-Username"),
+			r.Header.Get("Cookie"),
+			r.Header.Get("User-Agent"),
+		)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// guestCookieMiddleware 给直接访问（无 CGI、无 header）的浏览器一个 office_guest_id cookie，
+// 让身份回退链路在直连场景下也能工作。已有 cookie 就不覆盖。
+func guestCookieMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("office_guest_id"); err != nil || c.Value == "" {
+			b := make([]byte, 6)
+			rand.Read(b)
+			gid := "guest_" + hex.EncodeToString(b)
+			http.SetCookie(w, &http.Cookie{
+				Name:     "office_guest_id",
+				Value:    gid,
+				Path:     "/",
+				MaxAge:   365 * 24 * 3600,
+				HttpOnly: false,
+			})
+			// 同步写到 Request，让本请求里后续 handler 也能读到这个 guest id
+			r.AddCookie(&http.Cookie{Name: "office_guest_id", Value: gid})
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func corsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -792,7 +975,7 @@ func handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const AppVersion = "1.0.31"
+const AppVersion = "1.0.36"
 
 func handleCheckUpdate(w http.ResponseWriter) {
 	// Check GitHub for latest release
