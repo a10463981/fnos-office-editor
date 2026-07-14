@@ -35,22 +35,46 @@ if action == 'officeds':
 # ---- 通用 API 代理 ----
 if action == 'api':
     api_path = params.get('path', [''])[0]
-    if not api_path.startswith('/api/'):
+    if not api_path.startswith('api/') and not api_path.startswith('/api/'):
         print('Content-Type: application/json')
         print('Status: 400\n')
         print('{"error":"invalid path"}')
         sys.exit(0)
+    api_path = api_path.lstrip('/')
+    # 分离 path 部分和 query 部分（path 值可能包含 ? 后面的首个参数）
+    if '?' in api_path:
+        path_part, extra_qs = api_path.split('?', 1)
+    else:
+        path_part, extra_qs = api_path, ''
+    # 收集剩余原始 query 参数（排除 action= 和 path=）
+    orig_qs = os.environ.get('QUERY_STRING', '')
+    remaining = [p for p in orig_qs.split('&') if not p.startswith('action=') and not p.startswith('path=')]
+    # 重组最终 query: path 自带的参数 + 剩余的原始参数
+    all_qs_parts = []
+    if extra_qs:
+        all_qs_parts.append(extra_qs)
+    all_qs_parts.extend(remaining)
+    final_qs = '&'.join(all_qs_parts)
+    backend_url = f'{connector_base}/{path_part}'
+    if final_qs:
+        backend_url += '?' + final_qs
+    # 读取 POST body
     method = os.environ.get('REQUEST_METHOD', 'GET').upper()
     body_bytes = b''
     cl = os.environ.get('CONTENT_LENGTH', '0')
+    content_type = os.environ.get('CONTENT_TYPE', 'application/json')
     if cl and cl.isdigit() and int(cl) > 0:
         body_bytes = sys.stdin.buffer.read(int(cl))
-    orig_qs = os.environ.get('QUERY_STRING', '')
-    new_qs = [p for p in orig_qs.split('&') if not p.startswith('action=') and not p.startswith('path=')]
-    qs_sfx = ('?' + '&'.join(new_qs)) if new_qs else ''
-    url = f'{connector_base}{api_path}{qs_sfx}'
-    result = subprocess.run(['curl', '-s', '-X', method, '--data-binary', '@-', url],
-                          input=body_bytes, capture_output=True, timeout=30)
+    # 构建 curl 命令
+    curl_cmd = ['curl', '-s', '-X', method, '--data-binary', '@-']
+    # 透传 Content-Type
+    curl_cmd.extend(['-H', f'Content-Type: {content_type}'])
+    # 注入 FNOS 身份头
+    curl_cmd.extend(['-H', f'X-FNOS-UserID: {user_id}'])
+    curl_cmd.extend(['-H', f'X-FNOS-Username: {user_name}'])
+    curl_cmd.append(backend_url)
+    result = subprocess.run(curl_cmd, input=body_bytes, capture_output=True, timeout=30)
+    # 透传 Connector 的 Content-Type
     print('Content-Type: application/json')
     print()
     sys.stdout.buffer.write(result.stdout if result.stdout else b'null')
