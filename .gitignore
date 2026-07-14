@@ -7,6 +7,7 @@
 
 # Go
 connector/officeeditor-connector
+connector/server
 connector/vendor/
 
 # Build output
