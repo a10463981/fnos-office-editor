@@ -8,6 +8,7 @@
 # Go
 connector/officeeditor-connector
 connector/server
+app/connector/officeeditor-connector
 connector/vendor/
 
 # Build output
