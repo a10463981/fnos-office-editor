@@ -59,10 +59,10 @@ if action == 'api':
 # ---- 新建文档 ----
 if action == 'create':
     doc_type = params.get('type', ['docx'])[0]
-    r = subprocess.run(['curl','-s','-X','POST',f'{connector_base}/api/create?type={doc_type}&dir={urllib.parse.quote(user_dir)}'], capture_output=True, text=True, timeout=10)
+    r = subprocess.run(['curl','-s','-X','POST',f'{connector_base}/api/create?type={doc_type}&dir={urllib.parse.quote(user_dir)}&user_id={urllib.parse.quote(user_id)}'], capture_output=True, text=True, timeout=10)
     try: d = json.loads(r.stdout.strip()); np = d.get('path', r.stdout.strip())
     except: np = r.stdout.strip()
-    print(f'Location: /cgi/ThirdParty/OfficeEditor/index.cgi?path={urllib.parse.quote(np)}')
+    print(f'Location: /cgi/ThirdParty/OfficeEditor/index.cgi?path={urllib.parse.quote(np)}&user_id={urllib.parse.quote(user_id)}&user_name={urllib.parse.quote(user_name)}')
     print('Status: 302\n')
     sys.exit(0)
 

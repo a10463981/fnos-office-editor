@@ -363,13 +363,11 @@ func getEffectiveUserID(r *http.Request) string {
 	if uid != "" {
 		return uid
 	}
-	// 无用户ID时用客户端 IP 做隔离，确保不同机器用户历史互不干扰
-	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx > 0 {
-		uid = r.RemoteAddr[:idx]
-	} else {
-		uid = r.RemoteAddr
+	// 无 FNOS 身份时使用 guest cookie
+	if c, err := r.Cookie("office_guest_id"); err == nil && c.Value != "" {
+		return c.Value
 	}
-	return "ip_" + uid
+	return "anonymous"
 }
 
 func buildEditorConfig(filePath string, r *http.Request, cfg *Config, baseURL string) string {
@@ -655,11 +653,22 @@ func saveAppConfig(cfg *Config, c *AppConfig) {
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	dir := r.URL.Query().Get("dir")
 	if dir == "" { dir = "/vol1/1000" }
-	// 端口路由直连 10088 时 fnOS 不传递用户身份
-	// 优先读 X-Auth-* 头(nginx 代理模式),再读 query 参数(CGI 路径路由)
+	// 优先读 FNOS 用户身份（通过 CGI 桥注入 query params 或 HTTP 头）
 	userName := getUserName(r)
 	if userName == "" { userName = "FNos 用户" }
 	userId := getUserID(r)
+	// 无 FNOS 身份时生成访客 UUID
+	if userId == "" {
+		if c, err := r.Cookie("office_guest_id"); err == nil && c.Value != "" {
+			userId = c.Value
+		} else {
+			userId = fmt.Sprintf("guest_%x", time.Now().UnixNano())
+			http.SetCookie(w, &http.Cookie{
+				Name: "office_guest_id", Value: userId,
+				Path: "/", MaxAge: 86400 * 30,
+			})
+		}
+	}
 	apiBase := r.URL.Query().Get("api_base")
 	// 端口路由下前端必须用相对路径,由 fnOS nginx 代理转发
 	if apiBase == "" { apiBase = "" }
