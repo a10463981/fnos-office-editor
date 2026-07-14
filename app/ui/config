@@ -1,10 +1,12 @@
 {
   ".url": {
-    "OfficeEditor.Desktop": {
-      "title": "office 协作",
+    "FNOSOfficeSuite.Desktop": {
+      "title": "FNOS Office Suite",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
-      "url": "/cgi/ThirdParty/OfficeEditor/index.cgi",
+      "protocol": "",
+      "port": "8080",
+      "url": "/",
       "allUsers": true,
       "noDisplay": false,
       "fileTypes": [
