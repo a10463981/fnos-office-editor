@@ -185,13 +185,11 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 	// OnlyOffice API JS 始终通过连接器自身 /officeds/ 代理加载
 	// 连接器将 /officeds/ → OnlyOffice Document Server (9080)
-	// script 标签加载无跨域限制，浏览器从 cfg.BaseURL 加载
-	apiJSBase := cfg.BaseURL
+	// 使用相对路径，由 fnOS nginx 代理转发（端口路由时浏览器从 fnOS 代理路径加载）
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
-	html := strings.Replace(editorPageHTML, "__API_JS_BASE__", apiJSBase, 1)
-	fmt.Fprintf(w, html, configJSON)
+	fmt.Fprintf(w, editorPageHTML, configJSON)
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -394,7 +392,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="__API_JS_BASE__/officeds/web-apps/apps/api/documents/api.js"></script>
+<script src="officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
@@ -578,7 +576,9 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	userName := r.URL.Query().Get("user_name")
 	if userName == "" { userName = "FNos 用户" }
 	apiBase := r.URL.Query().Get("api_base")
-	if apiBase == "" { apiBase = "http://localhost:10088" }
+	// 端口路由下，前端必须使用相对路径，由 fnOS nginx 代理转发
+	// 硬编码 localhost:10088 会导致浏览器端无法访问（用户本机 ≠ 服务器）
+	if apiBase == "" { apiBase = "" }
 	userId := r.URL.Query().Get("user_id")
 	if userId == "" { userId = "anonymous" }
 	isAdmin := r.URL.Query().Get("is_admin")
@@ -694,7 +694,8 @@ function createDoc(type){
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
-      window.location.href="/?path="+encodeURIComponent(d.path);
+      // 端口路由下必须用相对路径，由 fnOS nginx 代理路径映射
+      window.location.href="?path="+encodeURIComponent(d.path);
     })
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
@@ -707,7 +708,7 @@ function loadHistory(){
       var icons={"docx":"📝","xlsx":"📊","pptx":"📽️","doc":"📝","xls":"📊","ppt":"📽️","pdf":"📕","txt":"📄"};
       h.innerHTML=items.map(function(i){
         var ext=i.name.split(".").pop().toLowerCase();
-        return '<a class="history-item" href="/?path='+encodeURIComponent(i.path)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
+        return '<a class="history-item" href="?path='+encodeURIComponent(i.path)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
       }).join("");
     })
 }
