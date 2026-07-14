@@ -318,6 +318,10 @@ func getClientIP(r *http.Request) string {
 }
 
 func getUserID(r *http.Request) string {
+	// fnOS nginx 代理透传的用户身份（CGI 路径路由 / 端口路由 nginx 代理）
+	if uid := r.Header.Get("X-Trim-UserID"); uid != "" {
+		return uid
+	}
 	if uid := r.Header.Get("X-Auth-UID"); uid != "" {
 		return uid
 	}
@@ -334,6 +338,10 @@ func getUserID(r *http.Request) string {
 }
 
 func getUserName(r *http.Request) string {
+	// fnOS nginx 代理透传的用户身份（CGI 路径路由 / 端口路由 nginx 代理）
+	if n := r.Header.Get("X-Trim-Username"); n != "" {
+		return n
+	}
 	if n := r.Header.Get("X-Auth-Username"); n != "" {
 		return n
 	}
@@ -647,7 +655,7 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	// 端口路由直连 10088 时 fnOS 不传递用户身份
 	// 优先读 X-Auth-* 头(nginx 代理模式),再读 query 参数(CGI 路径路由)
 	userName := getUserName(r)
-	if userName == "" { userName = getClientIP(r) }
+	if userName == "" { userName = "FNos 用户" }
 	userId := getUserID(r)
 	apiBase := r.URL.Query().Get("api_base")
 	// 端口路由下前端必须用相对路径,由 fnOS nginx 代理转发

@@ -57,6 +57,9 @@ NGXEOF
 #     所有场景通过 nginx 统一入口，浏览器不用直接连 10088 端口
 cat > "/usr/trim/nginx/conf/conf.d/officeeditor-api.conf" << 'NGXEOF'
 location ^~ /officeeditor-api/ {
+	   proxy_set_header X-Trim-UserID $http_x_trim_userid;
+	   proxy_set_header X-Trim-Username $http_x_trim_username;
+	   proxy_set_header X-Trim-IsAdmin $http_x_trim_isadmin;
    proxy_pass http://127.0.0.1:10088/;
    proxy_set_header Host $host;
    proxy_set_header X-Real-IP $remote_addr;
