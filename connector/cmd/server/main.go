@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
-	"fnos-office-editor/connector/internal/config"
-	"fnos-office-editor/connector/internal/router"
+	"fnos-office-editor/connector/internal/server"
 )
 
 func main() {
@@ -24,37 +24,45 @@ func main() {
 	flag.Parse()
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-	log.Printf("FNos OfficeEditor Office Gateway v1.0.29")
-	log.Printf("架构: FNOS Port Gateway (已移除 CGI 依赖)")
+	log.Printf("FNos OfficeEditor Connector v1.0.0")
 
-	// config.Load() 已从环境变量读取配置
-	// flag 值如果被设置（非默认）则覆盖配置
-
-	// 加载配置（环境变量 > flag > 默认值）
-	cfg := config.Load()
-
-	// 命令行 flag 优先级高于 config.Load() 的环境变量读取
-	// 保留 flag 覆盖能力
-	cfg.Server.Port = *port
-	if *docSvr != "http://127.0.0.1:9080" {
-		cfg.OnlyOffice.InternalURL = *docSvr
+	// 从环境变量读取（优先级高于命令行）
+	if v := os.Getenv("PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			*port = p
+		}
 	}
-	if *jwtSecret != "" {
-		cfg.JWTSecret = *jwtSecret
+	if v := os.Getenv("DOC_SERVER_URL"); v != "" {
+		*docSvr = v
 	}
-	if *baseURL != "" {
-		cfg.Network.BaseURL = *baseURL
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		*jwtSecret = v
 	}
-	if *pubBaseURL != "" {
-		cfg.Network.PublicBaseURL = *pubBaseURL
+	if v := os.Getenv("BASE_URL"); v != "" {
+		*baseURL = v
+	}
+	if v := os.Getenv("PUBLIC_BASE_URL"); v != "" {
+		*pubBaseURL = v
 	}
 
-	// 构建路由
-	rt := router.New(cfg)
-	handler := rt.Handler()
+	// 自动推断 baseURL
+	if *baseURL == "" {
+		*baseURL = fmt.Sprintf("http://localhost:%d", *port)
+	}
+
+	cfg := &server.Config{
+		Port:             *port,
+		DocServerURL:     *docSvr,
+		JWTSecret:        *jwtSecret,
+		BaseURL:          *baseURL,
+		PublicBaseURL:    *pubBaseURL,
+		InternalNetworks: []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+	}
+
+	handler := server.NewServer(cfg)
 
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Addr:         fmt.Sprintf(":%d", *port),
 		Handler:      handler,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 120 * time.Second,
@@ -62,13 +70,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Office Gateway 启动，监听 :%d", cfg.Server.Port)
-		log.Printf("  OnlyOffice: %s", cfg.OnlyOffice.InternalURL)
-		log.Printf("  Base URL:   %s", cfg.Network.BaseURL)
-		log.Printf("  Data Dir:   %s", cfg.Paths.DataDir)
-		if cfg.JWTSecret != "" {
-			log.Printf("  JWT: 已启用")
-		}
+		log.Printf("服务器启动，监听 :%d", *port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("启动失败: %v", err)
 		}
@@ -84,6 +86,3 @@ func main() {
 	httpServer.Shutdown(ctx)
 	log.Println("已关闭")
 }
-
-
-

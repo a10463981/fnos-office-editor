@@ -4,7 +4,9 @@
       "title": "office 协作",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
-      "url": "/officeeditor/",
+      "protocol": "",
+      "port": "10088",
+      "url": "/",
       "allUsers": true,
       "noDisplay": false,
       "fileTypes": [
