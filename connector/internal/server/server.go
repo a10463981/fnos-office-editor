@@ -299,6 +299,24 @@ func getHostOverride(r *http.Request) string {
 	return ""
 }
 
+// getClientIP 获取客户端真实 IP（优先 X-Real-IP，再 X-Forwarded-For，最后 RemoteAddr）
+func getClientIP(r *http.Request) string {
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		if idx := strings.Index(fwd, ","); idx > 0 {
+			return strings.TrimSpace(fwd[:idx])
+		}
+		return strings.TrimSpace(fwd)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func getUserID(r *http.Request) string {
 	if uid := r.Header.Get("X-Auth-UID"); uid != "" {
 		return uid
@@ -309,7 +327,10 @@ func getUserID(r *http.Request) string {
 	if uid := r.Header.Get("Remote-User"); uid != "" {
 		return uid
 	}
-	return r.URL.Query().Get("user_id")
+	if uid := r.URL.Query().Get("user_id"); uid != "" {
+		return uid
+	}
+	return ""
 }
 
 func getUserName(r *http.Request) string {
@@ -319,7 +340,10 @@ func getUserName(r *http.Request) string {
 	if n := r.Header.Get("X-Forwarded-User"); n != "" {
 		return n
 	}
-	return r.URL.Query().Get("user_name")
+	if n := r.URL.Query().Get("user_name"); n != "" {
+		return n
+	}
+	return ""
 }
 
 // getEffectiveUserID 获取用户标识，无可用标识时使用客户端 IP 做隔离
@@ -620,16 +644,14 @@ func saveAppConfig(cfg *Config, c *AppConfig) {
 func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	dir := r.URL.Query().Get("dir")
 	if dir == "" { dir = "/vol1/1000" }
-	// 端口路由下 fnOS nginx 通过 X-Auth-* 头透传用户身份，优先使用
-	userName := r.Header.Get("X-Auth-Username")
-	if userName == "" { userName = r.URL.Query().Get("user_name") }
-	if userName == "" { userName = "FNos 用户" }
+	// 端口路由直连 10088 时 fnOS 不传递用户身份
+	// 优先读 X-Auth-* 头(nginx 代理模式),再读 query 参数(CGI 路径路由)
+	userName := getUserName(r)
+	if userName == "" { userName = getClientIP(r) }
+	userId := getUserID(r)
 	apiBase := r.URL.Query().Get("api_base")
-	// 端口路由下，前端必须使用相对路径，由 fnOS nginx 代理转发
+	// 端口路由下前端必须用相对路径,由 fnOS nginx 代理转发
 	if apiBase == "" { apiBase = "" }
-	userId := r.Header.Get("X-Auth-UID")
-	if userId == "" { userId = r.URL.Query().Get("user_id") }
-	// userId 留空由 historyFilePath() 统一处理为 "shared"
 	isAdmin := r.URL.Query().Get("is_admin")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -740,7 +762,7 @@ function createDoc(type){
   var btn=event.target;
   btn.disabled=true;
   btn.innerHTML=btn.innerHTML.replace(/<span>.*<\/span>/,'<span class="spinner"></span>');
-  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId),{method:"POST"}user_id="+encodeURIComponent(userId)+"&user_name="+encodeURIComponent(userName),{method:"POST"})
+  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId)+"&user_name="+encodeURIComponent(userName),{method:"POST"})
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
