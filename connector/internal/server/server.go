@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -97,10 +98,23 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("/sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
-			// Wrap mux with officeds proxy middleware (catches before routing)
+		// 代理 OnlyOffice JS/CSS 及 WebSocket（端口路由时浏览器通过 fnOS nginx 访问）
+	// httputil.ReverseProxy 原生支持 WebSocket 升级
+	ooURL, _ := url.Parse(cfg.DocServerURL)
+	ooProxy := httputil.NewSingleHostReverseProxy(ooURL)
+	ooProxy.ModifyResponse = func(r *http.Response) error {
+		// OnlyOffice DocServer 资源加载必须加 CORS 头，否则浏览器跨域被阻止
+		r.Header.Set("Access-Control-Allow-Origin", "*")
+		r.Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT")
+		r.Header.Set("Access-Control-Allow-Headers", "Origin, Content-Type, X-Requested-With, Authorization")
+		return nil
+	}
+
 	return corsHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/officeds/") {
-			handleOfficedsProxy(w, r)
+			// 剥离前缀，把 /officeds/xxx → /xxx，然后由 ReverseProxy 转发到 DocServer
+			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/officeds")
+			ooProxy.ServeHTTP(w, r)
 			return
 		}
 		mux.ServeHTTP(w, r)
@@ -153,7 +167,10 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		"documentType": documentType(ext),
 		"editorConfig": map[string]interface{}{
 			"callbackUrl": callbackURL,
-			"lang":        "zh",
+			// serverUrl 让 OnlyOffice API 通过 /officeds/ 代理连接 DocServer
+			// 包括 WebSocket(co-authoring) 和文件资源加载，避免跨域和 127.0.0.1 直连
+			"serverUrl": fmt.Sprintf("http://%s/officeds", r.Host),
+			"lang":      "zh",
 			"mode":        map[bool]string{true: "edit", false: "view"}[canEdit],
 			"user": map[string]interface{}{
 				"id": userID, "name": userName,
@@ -320,6 +337,7 @@ func buildEditorConfig(filePath string, r *http.Request, cfg *Config, baseURL st
 		"documentType": documentType(ext),
 		"editorConfig": map[string]interface{}{
 			"callbackUrl": fmt.Sprintf("%s/api/callback?path=%s", baseURL, url.QueryEscape(filePath)),
+			"serverUrl":   fmt.Sprintf("http://%s/officeds", r.Host),
 			"mode":        "edit",
 			"lang":        "zh",
 			"user": map[string]interface{}{
@@ -756,21 +774,6 @@ func corsHandler(next http.Handler) http.Handler {
 func isSafePath(p string) bool {
 	if p == "" || strings.Contains(p, "..") { return false }
 	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
-}
-
-func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
-	backend := "http://127.0.0.1:9080" + strings.TrimPrefix(r.URL.Path, "/officeds")
-	if r.URL.RawQuery != "" { backend += "?" + r.URL.RawQuery }
-	// Forward the request with the original method
-	req, err := http.NewRequest(r.Method, backend, r.Body)
-	if err != nil { http.Error(w, "proxy error", 502); return }
-	req.Header = r.Header
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil { http.Error(w, "proxy error", 502); return }
-	defer resp.Body.Close()
-	for k, v := range resp.Header { w.Header()[k] = v }
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
 }
 
 func base64URLEncode(data []byte) string {
