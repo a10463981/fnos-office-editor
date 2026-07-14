@@ -185,7 +185,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 var userDir="USER_DIR_PLACEHOLDER";
 var userName="USER_NAME_PLACEHOLDER";
 var userId="USER_ID_PLACEHOLDER";
-var apiBase="";
+var apiBase="/officeeditor/";
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 function createDoc(type){
   var btn=event.target;

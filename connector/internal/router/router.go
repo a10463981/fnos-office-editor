@@ -3,7 +3,7 @@
 // 1. 系统 API: /health, /api/*
 // 2. OnlyOffice 代理: /officeds/*, /cache/*
 // 3. 文件服务: /api/download, /api/create, /api/callback
-// 4. FNOS 前缀: /officeeditor-api/*（剥离后重新路由）
+// 4. FNOS 前缀: /officeeditor/*（剥离后重新路由）
 // 5. 页面渲染: /editor, /
 // 6. 静态资源: /sponsor/*
 package router
@@ -50,7 +50,7 @@ func New(cfg *config.Config) *Mux {
 	log.Printf("  /api/*        → System API")
 	log.Printf("  /officeds/*   → OnlyOffice Proxy")
 	log.Printf("  /cache/*      → DocServer Cache")
-	log.Printf("  /officeeditor-api/* → FNOS Prefix (stripped)")
+	log.Printf("  /officeeditor/* → FNOS Prefix (stripped)")
 	log.Printf("  /editor       → Editor Page")
 	log.Printf("  /             → SPA Fallback")
 	return rt
@@ -69,9 +69,9 @@ func (rt *Mux) Handler() http.Handler {
 			return
 		}
 
-		// 2. FNOS 前缀剥离（/officeeditor-api/ → /）
-		if strings.HasPrefix(r.URL.Path, "/officeeditor-api") {
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/officeeditor-api")
+		// 2. FNOS 前缀剥离（/officeeditor/ → /）
+		if strings.HasPrefix(r.URL.Path, "/officeeditor") {
+			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/officeeditor")
 			if r.URL.Path == "" {
 				r.URL.Path = "/"
 			}
@@ -103,8 +103,6 @@ func (rt *Mux) register() {
 
 	// === 第四优先级: 静态资源 ===
 	// === FNOS nginx 代理前缀（直接路由，不依赖中间件剥离）===
-	rt.mux.HandleFunc("/officeeditor-api/", rt.handleOfficeEditorAPI)
-	rt.mux.HandleFunc("/officeeditor-api", rt.handleOfficeEditorAPI)
 	rt.mux.HandleFunc("/sponsor/", rt.handleSponsorImage)
 }
 
@@ -234,19 +232,6 @@ func (rt *Mux) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// handleOfficeEditorAPI 处理直接通过 FNOS nginx 代理前缀的请求
-func (rt *Mux) handleOfficeEditorAPI(w http.ResponseWriter, r *http.Request) {
-	filePath := r.URL.Query().Get("path")
-	if filePath != "" && file.SafePath(filePath) {
-		rt.handleEditorPage(w, r)
-		return
-	}
-	if r.URL.Path == "/officeeditor-api/" || r.URL.Path == "/officeeditor-api" {
-		rt.renderHomePage(w, r)
-		return
-	}
-	http.NotFound(w, r)
-}
 func (rt *Mux) handleSponsorImage(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, rt.cfg.Paths.ImageDir+"/donate.png")
 }
