@@ -210,7 +210,7 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	// 使用相对路径，由 fnOS nginx 代理转发（端口路由时浏览器从 fnOS 代理路径加载）
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	addToHistory(cfg, filePath, getUserID(r))
+	addToHistory(cfg, filePath, getEffectiveUserID(r))
 	fmt.Fprintf(w, editorPageHTML, configJSON)
 }
 
@@ -303,6 +303,12 @@ func getUserID(r *http.Request) string {
 	if uid := r.Header.Get("X-Auth-UID"); uid != "" {
 		return uid
 	}
+	if uid := r.Header.Get("X-Forwarded-User"); uid != "" {
+		return uid
+	}
+	if uid := r.Header.Get("Remote-User"); uid != "" {
+		return uid
+	}
 	return r.URL.Query().Get("user_id")
 }
 
@@ -310,7 +316,25 @@ func getUserName(r *http.Request) string {
 	if n := r.Header.Get("X-Auth-Username"); n != "" {
 		return n
 	}
+	if n := r.Header.Get("X-Forwarded-User"); n != "" {
+		return n
+	}
 	return r.URL.Query().Get("user_name")
+}
+
+// getEffectiveUserID 获取用户标识，无可用标识时使用客户端 IP 做隔离
+func getEffectiveUserID(r *http.Request) string {
+	uid := getUserID(r)
+	if uid != "" {
+		return uid
+	}
+	// 无用户ID时用客户端 IP 做隔离，确保不同机器用户历史互不干扰
+	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx > 0 {
+		uid = r.RemoteAddr[:idx]
+	} else {
+		uid = r.RemoteAddr
+	}
+	return "ip_" + uid
 }
 
 func buildEditorConfig(filePath string, r *http.Request, cfg *Config, baseURL string) string {
@@ -477,7 +501,7 @@ func addToHistory(cfg *Config, filePath string, userId string) {
 }
 
 func handleHistory(w http.ResponseWriter, r *http.Request, cfg *Config) {
-	userId := r.URL.Query().Get("user_id")
+	userId := getEffectiveUserID(r)
 	entries := loadHistory(cfg, userId)
 	if entries == nil { entries = []HistoryEntry{} }
 	w.Header().Set("Content-Type", "application/json")
@@ -516,7 +540,7 @@ func handleCreateDocument(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	}
 	f.Close()
 
-	addToHistory(cfg, filePath, getUserID(r))
+	addToHistory(cfg, filePath, getEffectiveUserID(r))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"path": filePath, "name": name})
@@ -610,7 +634,7 @@ func handleHomePage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	html := strings.Replace(homePageHTML, "USER_DIR_PLACEHOLDER", dir, 1)
-	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, 1)
+	html = strings.Replace(html, "USER_NAME_PLACEHOLDER", userName, -1)
 	html = strings.Replace(html, "API_BASE_PLACEHOLDER", apiBase, 1)
 	html = strings.Replace(html, "USER_ID_PLACEHOLDER", userId, 1)
 	if isAdmin == "true" {
@@ -708,6 +732,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <div class="toast" id="toast"></div>
 <script>
 var userDir="USER_DIR_PLACEHOLDER";
+var userName="USER_NAME_PLACEHOLDER";
 var userId="USER_ID_PLACEHOLDER";
 var apiBase="API_BASE_PLACEHOLDER";
 function toast(msg){var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
@@ -715,12 +740,12 @@ function createDoc(type){
   var btn=event.target;
   btn.disabled=true;
   btn.innerHTML=btn.innerHTML.replace(/<span>.*<\/span>/,'<span class="spinner"></span>');
-  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId),{method:"POST"})
+  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId),{method:"POST"}user_id="+encodeURIComponent(userId)+"&user_name="+encodeURIComponent(userName),{method:"POST"})
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
       // 端口路由下必须用相对路径，由 fnOS nginx 代理路径映射
-      window.location.href="?path="+encodeURIComponent(d.path);
+      window.location.href="?path="+encodeURIComponent(d.path)+"&user_id="+encodeURIComponent(userId)+"&user_name="+encodeURIComponent(userName);
     })
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
@@ -733,7 +758,7 @@ function loadHistory(){
       var icons={"docx":"📝","xlsx":"📊","pptx":"📽️","doc":"📝","xls":"📊","ppt":"📽️","pdf":"📕","txt":"📄"};
       h.innerHTML=items.map(function(i){
         var ext=i.name.split(".").pop().toLowerCase();
-        return '<a class="history-item" href="?path='+encodeURIComponent(i.path)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
+        return '<a class="history-item" href="?path='+encodeURIComponent(i.path)+'&user_id='+encodeURIComponent(userId)+'&user_name='+encodeURIComponent(userName)+'"><span class="icon">'+(icons[ext]||"📄")+'</span><div class="info"><div class="name">'+i.name+'</div><div class="time">'+i.openedAt+'</div></div></a>'
       }).join("");
     })
 }
