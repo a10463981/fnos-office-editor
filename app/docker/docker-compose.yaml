@@ -10,6 +10,8 @@ services:
     restart: unless-stopped
     ports:
       - "9080:80"    # OnlyOffice HTTP API
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 容器内访问主机用（文档下载/回调）
     environment:
       - JWT_ENABLED=true
       - JWT_SECRET=${JWT_SECRET:-officeeditor-default-secret}

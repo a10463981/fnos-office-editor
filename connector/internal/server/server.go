@@ -36,14 +36,14 @@ type Config struct {
 func NewServer(cfg *Config) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok", "version": "1.0.0", "time": time.Now().Unix(),
 		})
 	})
 
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
@@ -56,41 +56,46 @@ func NewServer(cfg *Config) http.Handler {
 		handleHomePage(w, r, cfg)
 	})
 
-	mux.HandleFunc("GET /api/history", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
 		handleHistory(w, r, cfg)
 	})
-	mux.HandleFunc("POST /api/create", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/create", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDocument(w, r, cfg)
 	})
-	mux.HandleFunc("POST /api/fonts/refresh", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/fonts/refresh", func(w http.ResponseWriter, r *http.Request) {
 		handleFontRefresh(w)
 	})
-	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
-		handleGetConfig(w, cfg)
+	// /api/config handles both GET (read) and POST (save)
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetConfig(w, cfg)
+		case http.MethodPost:
+			handleSaveConfig(w, r, cfg)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
-	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
-		handleSaveConfig(w, r, cfg)
-	})
-	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w)
 	})
-	mux.HandleFunc("GET /api/check-update", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/check-update", func(w http.ResponseWriter, r *http.Request) {
 		handleCheckUpdate(w)
 	})
 
-	mux.HandleFunc("GET /api/editor", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorConfig(w, r, cfg)
 	})
-	mux.HandleFunc("GET /api/download", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/download", func(w http.ResponseWriter, r *http.Request) {
 		handleDownload(w, r)
 	})
-	mux.HandleFunc("POST /api/callback", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/callback", func(w http.ResponseWriter, r *http.Request) {
 		handleCallback(w, r)
 	})
-	mux.HandleFunc("GET /editor", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/editor", func(w http.ResponseWriter, r *http.Request) {
 		handleEditorPage(w, r, cfg)
 	})
-	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
 
@@ -114,7 +119,14 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 	ext := strings.TrimPrefix(filepath.Ext(filePath), ".")
-	baseURL := getEffectiveBaseURL(r, cfg)
+	// 文档下载/回调地址必须从 OnlyOffice Docker 容器可达
+	// 使用 host.docker.internal 让容器访问主机端口 10088
+	docURL := cfg.BaseURL
+	if cfg.PublicBaseURL != "" && !isInternalHost(r.Host, cfg.InternalNetworks) {
+		docURL = cfg.PublicBaseURL
+	} else {
+		docURL = "http://host.docker.internal:10088"
+	}
 
 	mode := r.URL.Query().Get("mode")
 	canEdit := editable(ext) && mode != "view"
@@ -125,8 +137,8 @@ func handleEditorConfig(w http.ResponseWriter, r *http.Request, cfg *Config) {
 	h := sha256.Sum256([]byte(keyData))
 	docKey := fmt.Sprintf("%x", h)[:20]
 
-	downloadURL := fmt.Sprintf("%s/api/download?path=%s", baseURL, url.QueryEscape(filePath))
-	callbackURL := fmt.Sprintf("%s/api/callback?path=%s", baseURL, url.QueryEscape(filePath))
+	downloadURL := fmt.Sprintf("%s/api/download?path=%s", docURL, url.QueryEscape(filePath))
+	callbackURL := fmt.Sprintf("%s/api/callback?path=%s", docURL, url.QueryEscape(filePath))
 
 	config := map[string]interface{}{
 		"document": map[string]interface{}{
@@ -166,18 +178,24 @@ func handleEditorPage(w http.ResponseWriter, r *http.Request, cfg *Config) {
 		return
 	}
 
-	// Get effective host for URLs (from CGI proxy)
-	overrideHost := getHostOverride(r)
-	baseURL := cfg.BaseURL
-	if overrideHost != "" {
-		baseURL = "http://" + overrideHost + ":10088"
-	}
+	// 文档下载/回调 URL 使用 host.docker.internal（Docker 容器可达）
+	// 因为 OnlyOffice Document Server (Docker 内) 需要从服务器端调用这些地址
+	dockerURL := "http://host.docker.internal:10088"
+	configJSON := buildEditorConfig(filePath, r, cfg, dockerURL)
 
-	configJSON := buildEditorConfig(filePath, r, cfg, baseURL)
+	// OnlyOffice API JS 通过 CGI 代理路径（浏览器同源加载）
+	// CGI 代理将 action=officeds 转发到 OnlyOffice Document Server (9080)
+	// 同时兼容连接器自带的 /officeds/ 代理（直接访问 10088 端口时）
+	cgiBase := r.URL.Query().Get("cgi_base")
+	apiJSBase := cfg.BaseURL
+	if cgiBase != "" {
+		apiJSBase = cgiBase + "?action=officeds&path="
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	addToHistory(cfg, filePath, r.URL.Query().Get("user_id"))
-	fmt.Fprintf(w, editorPageHTML, configJSON)
+	html := strings.Replace(editorPageHTML, "__API_JS_BASE__", apiJSBase, 1)
+	fmt.Fprintf(w, html, configJSON)
 }
 
 func handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -230,14 +248,28 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 // ========== helpers ==========
 
 func getEffectiveBaseURL(r *http.Request, cfg *Config) string {
+	// 优先级 1: 显式配置的公网地址（用户通过 DDNS / NAT 穿透访问时）
+	if cfg.PublicBaseURL != "" {
+		// 只有当请求来自外网时才使用公网地址
+		if !isInternalHost(r.Host, cfg.InternalNetworks) {
+			return cfg.PublicBaseURL
+		}
+	}
+
+	// 优先级 2: 请求中携带的 Host header（fnconnect / 反向代理场景）
 	host := r.Host
 	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
 		host = h
 	}
-	// Server-side calls always use localhost
-	if host == "localhost" || host == "127.0.0.1" || strings.HasPrefix(host, "::1") {
-		return cfg.BaseURL
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
 	}
+	// 如果请求是来自外部（非 localhost/内网），用请求本身的地址
+	if !isInternalHost(host, cfg.InternalNetworks) {
+		return fmt.Sprintf("%s://%s", scheme, strings.Split(host, ",")[0])
+	}
+
 	return cfg.BaseURL
 }
 
@@ -727,6 +759,22 @@ func corsHandler(next http.Handler) http.Handler {
 func isSafePath(p string) bool {
 	if p == "" || strings.Contains(p, "..") { return false }
 	return strings.HasPrefix(p, "/vol") || strings.HasPrefix(p, "/tmp/")
+}
+
+func handleOfficedsProxy(w http.ResponseWriter, r *http.Request) {
+	// Use ReverseProxy which supports HTTP Upgrade (WebSocket)
+	backendPath := strings.TrimPrefix(r.URL.Path, "/officeds")
+	target := &url.URL{Scheme: "http", Host: "127.0.0.1:9080"}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		return nil
+	}
+	// Rewrite the request path
+	r.URL.Path = backendPath
+	r.URL.Host = target.Host
+	r.URL.Scheme = target.Scheme
+	r.Host = target.Host
+	proxy.ServeHTTP(w, r)
 }
 
 func base64URLEncode(data []byte) string {
