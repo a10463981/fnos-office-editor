@@ -111,16 +111,19 @@ func NewServer(cfg *Config) http.Handler {
 	}
 
 	return corsHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("request: %s %s (from %s)", r.Method, r.URL.Path, r.RemoteAddr)
 		if strings.HasPrefix(r.URL.Path, "/officeds/") {
-			// /officeds/ → 剥离前缀后转发到 DocServer（JS/CSS 静态资源）
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/officeds")
 			ooProxy.ServeHTTP(w, r)
 			return
 		}
-		// /cache/ → DocServer 运行时生成的缓存资源路径（Editor.bin 等），直接代理
 		if strings.HasPrefix(r.URL.Path, "/cache/") {
 			ooProxy.ServeHTTP(w, r)
 			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/officeeditor-api") {
+			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/officeeditor-api")
+			if r.URL.Path == "" { r.URL.Path = "/" }
 		}
 		mux.ServeHTTP(w, r)
 	}))
@@ -770,7 +773,7 @@ function createDoc(type){
   var btn=event.target;
   btn.disabled=true;
   btn.innerHTML=btn.innerHTML.replace(/<span>.*<\/span>/,'<span class="spinner"></span>');
-  fetch(apiBase+"/api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId)+"&user_name="+encodeURIComponent(userName),{method:"POST"})
+  fetch(apiBase+"api/create?type="+type+"&dir="+encodeURIComponent(userDir)+"&user_id="+encodeURIComponent(userId)+"&user_name="+encodeURIComponent(userName),{method:"POST"})
     .then(r=>r.json())
     .then(d=>{
       if(d.error){toast("创建失败: "+d.error);btn.disabled=false;return}
@@ -780,7 +783,7 @@ function createDoc(type){
     .catch(e=>{toast("创建失败");btn.disabled=false})
 }
 function loadHistory(){
-  fetch(apiBase+"/api/history?user_id="+encodeURIComponent(userId))
+  fetch(apiBase+"api/history?user_id="+encodeURIComponent(userId))
     .then(r=>r.json())
     .then(items=>{
       var h=document.getElementById("history");
@@ -794,7 +797,7 @@ function loadHistory(){
 }
 function openSettings(){
   document.getElementById("settingsModal").classList.add("show");
-  fetch(apiBase+"/api/config").then(r=>r.json()).then(c=>{
+  fetch(apiBase+"api/config").then(r=>r.json()).then(c=>{
     document.getElementById("fontsDirInput").value=c.fontsDir||"";
   });
 }
@@ -806,7 +809,7 @@ function saveSettings(){
   if(!dir){toast("请输入字体目录路径") ;return;}
   var btn=document.getElementById("btnSaveSettings");
   btn.disabled=true;btn.textContent="Docker 重启中...";
-  fetch(apiBase+"/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
+  fetch(apiBase+"api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fontsDir:dir})})
     .then(r=>{if(!r.ok)throw new Error(r.status);return r.json()})
     .then(d=>{toast(d.ok?"字体设置已保存，Docker 容器重启中...":"保存失败: "+d.error);closeSettings();})
     .catch(e=>{toast("保存失败: "+e.message);})
@@ -814,8 +817,8 @@ function saveSettings(){
 }
 
 
-fetch(apiBase+"/api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
-document.getElementById('sponsorQr').src=apiBase+'/sponsor/donate';
+fetch(apiBase+"api/check-update").then(r=>r.json()).then(d=>{if(d.update){var el=document.getElementById("updateBar");el.innerHTML="📢 有新版本 v"+d.latest+"！<a href=\""+d.url+"\" target=\"_blank\" style=\"color:#ff0\">点击下载</a>";el.style.display="block";}});
+document.getElementById('sponsorQr').src=apiBase+'sponsor/donate';
 loadHistory();
 </script>
 </body></html>`
