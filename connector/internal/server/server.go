@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -92,6 +93,12 @@ func NewServer(cfg *Config) http.Handler {
 	mux.HandleFunc("GET /sponsor/", func(w http.ResponseWriter, r *http.Request) {
 		handleSponsorImage(w, r)
 	})
+
+	// 代理 OnlyOffice JS/CSS（直连模式时用户浏览器不走 127.0.0.1:9080）
+	ooURL, _ := url.Parse(cfg.DocServerURL)
+	ooProxy := httputil.NewSingleHostReverseProxy(ooURL)
+	mux.Handle("GET /officeds/", http.StripPrefix("/officeds", ooProxy))
+
 	return corsHandler(mux)
 }
 
@@ -359,7 +366,7 @@ const editorPageHTML = `<!DOCTYPE html>
 <title>FNos Office Editor</title>
 <style>html,body{height:100%%;margin:0;overflow:hidden}#editor{width:100%%;height:100%%}</style>
 </head><body><div id="editor"></div>
-<script src="http://127.0.0.1:9080/web-apps/apps/api/documents/api.js"></script>
+<script src="officeds/web-apps/apps/api/documents/api.js"></script>
 <script>
 var config=%s;
 var editor=new DocsAPI.DocEditor("editor",config);
